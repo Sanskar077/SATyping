@@ -1,0 +1,14 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "Xycgz86d9bReNU9Q6pOmu"
+uri = "file://gcc-tbc-pro.tar.gz"
+type = "unspecified"
+title = "GCC-TBC Pro — Full Project Archive"
+
+[[outputs]]
+id = "YPNJuQ4chM6ulOBe_iPL1"
+uri = "file://gcc-tbc-pro-v2.tar.gz"
+type = "unspecified"
+title = "GCC-TBC Pro — Complete Project (v2)"

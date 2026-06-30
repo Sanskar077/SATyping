@@ -1,0 +1,2200 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: GCC-TBC Pro Typing Platform API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: users
+    description: User management
+  - name: institutes
+    description: Institute management
+  - name: passages
+    description: Typing passage management
+  - name: typing
+    description: Typing session operations
+  - name: tests
+    description: Exam/test operations
+  - name: results
+    description: Result and analytics
+  - name: certificates
+    description: Certificate generation
+  - name: subscriptions
+    description: Subscription management
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  # ─── AUTH ────────────────────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login with email/password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout and revoke token
+      responses:
+        "204":
+          description: Logged out
+
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      tags: [auth]
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenInput"
+      responses:
+        "200":
+          description: New tokens
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/change-password:
+    post:
+      operationId: changePassword
+      tags: [auth]
+      summary: Change user password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordInput"
+      responses:
+        "200":
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── USERS ───────────────────────────────────────────────────────────────────
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all users (admin only)
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+        - name: instituteId
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Users list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponse"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get user by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update user profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete user (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── INSTITUTES ──────────────────────────────────────────────────────────────
+  /institutes:
+    get:
+      operationId: listInstitutes
+      tags: [institutes]
+      summary: List institutes
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Institutes list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstituteListResponse"
+
+    post:
+      operationId: createInstitute
+      tags: [institutes]
+      summary: Create a new institute
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstituteInput"
+      responses:
+        "201":
+          description: Created institute
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Institute"
+
+  /institutes/{id}:
+    get:
+      operationId: getInstitute
+      tags: [institutes]
+      summary: Get institute by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Institute
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Institute"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      operationId: updateInstitute
+      tags: [institutes]
+      summary: Update institute
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstituteUpdate"
+      responses:
+        "200":
+          description: Updated institute
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Institute"
+
+    delete:
+      operationId: deleteInstitute
+      tags: [institutes]
+      summary: Delete institute
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /institutes/{id}/students:
+    get:
+      operationId: getInstituteStudents
+      tags: [institutes]
+      summary: Get students of an institute
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Students list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponse"
+
+  /institutes/{id}/stats:
+    get:
+      operationId: getInstituteStats
+      tags: [institutes]
+      summary: Get institute analytics/stats
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Institute stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstituteStats"
+
+  # ─── BATCHES ─────────────────────────────────────────────────────────────────
+  /batches:
+    get:
+      operationId: listBatches
+      tags: [institutes]
+      summary: List batches for institute
+      parameters:
+        - name: instituteId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Batches list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Batch"
+
+    post:
+      operationId: createBatch
+      tags: [institutes]
+      summary: Create a new batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchInput"
+      responses:
+        "201":
+          description: Created batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Batch"
+
+  /batches/{id}:
+    get:
+      operationId: getBatch
+      tags: [institutes]
+      summary: Get batch by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Batch"
+
+    patch:
+      operationId: updateBatch
+      tags: [institutes]
+      summary: Update batch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchUpdate"
+      responses:
+        "200":
+          description: Updated batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Batch"
+
+    delete:
+      operationId: deleteBatch
+      tags: [institutes]
+      summary: Delete batch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── PASSAGES ─────────────────────────────────────────────────────────────────
+  /passages:
+    get:
+      operationId: listPassages
+      tags: [passages]
+      summary: List typing passages
+      parameters:
+        - name: language
+          in: query
+          schema:
+            type: string
+            enum: [english, hindi, marathi]
+        - name: difficulty
+          in: query
+          schema:
+            type: string
+            enum: [easy, medium, hard]
+        - name: speedCategory
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Passages list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PassageListResponse"
+
+    post:
+      operationId: createPassage
+      tags: [passages]
+      summary: Create a new passage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PassageInput"
+      responses:
+        "201":
+          description: Created passage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Passage"
+
+  /passages/random:
+    get:
+      operationId: getRandomPassage
+      tags: [passages]
+      summary: Get a random passage by criteria
+      parameters:
+        - name: language
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [english, hindi, marathi]
+        - name: speedCategory
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: difficulty
+          in: query
+          schema:
+            type: string
+            enum: [easy, medium, hard]
+      responses:
+        "200":
+          description: Random passage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Passage"
+        "404":
+          description: No passage found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /passages/{id}:
+    get:
+      operationId: getPassage
+      tags: [passages]
+      summary: Get passage by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Passage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Passage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      operationId: updatePassage
+      tags: [passages]
+      summary: Update passage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PassageUpdate"
+      responses:
+        "200":
+          description: Updated passage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Passage"
+
+    delete:
+      operationId: deletePassage
+      tags: [passages]
+      summary: Delete passage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── TYPING SESSIONS (PRACTICE) ───────────────────────────────────────────────
+  /typing-sessions:
+    get:
+      operationId: listTypingSessions
+      tags: [typing]
+      summary: List user's typing sessions
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+        - name: language
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Sessions list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TypingSessionListResponse"
+
+    post:
+      operationId: createTypingSession
+      tags: [typing]
+      summary: Start a new typing practice session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TypingSessionInput"
+      responses:
+        "201":
+          description: Created session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TypingSession"
+
+  /typing-sessions/{id}:
+    get:
+      operationId: getTypingSession
+      tags: [typing]
+      summary: Get typing session by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Typing session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TypingSession"
+
+    patch:
+      operationId: updateTypingSession
+      tags: [typing]
+      summary: Update/complete typing session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TypingSessionUpdate"
+      responses:
+        "200":
+          description: Updated session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TypingSession"
+
+  /typing-sessions/stats:
+    get:
+      operationId: getTypingStats
+      tags: [typing]
+      summary: Get user's typing stats summary
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+        - name: language
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Typing stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TypingStats"
+
+  # ─── TESTS (EXAM MODE) ───────────────────────────────────────────────────────
+  /tests:
+    get:
+      operationId: listTests
+      tags: [tests]
+      summary: List available tests
+      parameters:
+        - name: language
+          in: query
+          schema:
+            type: string
+        - name: speedCategory
+          in: query
+          schema:
+            type: integer
+        - name: instituteId
+          in: query
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Tests list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestListResponse"
+
+    post:
+      operationId: createTest
+      tags: [tests]
+      summary: Create a new test
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestInput"
+      responses:
+        "201":
+          description: Created test
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Test"
+
+  /tests/{id}:
+    get:
+      operationId: getTest
+      tags: [tests]
+      summary: Get test by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Test
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Test"
+
+    patch:
+      operationId: updateTest
+      tags: [tests]
+      summary: Update test
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestUpdate"
+      responses:
+        "200":
+          description: Updated test
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Test"
+
+    delete:
+      operationId: deleteTest
+      tags: [tests]
+      summary: Delete test
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── TEST ATTEMPTS ────────────────────────────────────────────────────────────
+  /test-attempts:
+    get:
+      operationId: listTestAttempts
+      tags: [tests]
+      summary: List test attempts
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+        - name: testId
+          in: query
+          schema:
+            type: integer
+        - name: language
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Test attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestAttemptListResponse"
+
+    post:
+      operationId: createTestAttempt
+      tags: [tests]
+      summary: Start a test attempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestAttemptInput"
+      responses:
+        "201":
+          description: Created attempt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestAttempt"
+
+  /test-attempts/{id}:
+    get:
+      operationId: getTestAttempt
+      tags: [tests]
+      summary: Get test attempt by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Test attempt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestAttempt"
+
+    patch:
+      operationId: submitTestAttempt
+      tags: [tests]
+      summary: Submit/complete a test attempt
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestAttemptSubmit"
+      responses:
+        "200":
+          description: Completed attempt with result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestAttempt"
+
+  # ─── RESULTS ──────────────────────────────────────────────────────────────────
+  /results:
+    get:
+      operationId: listResults
+      tags: [results]
+      summary: List results
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+        - name: testAttemptId
+          in: query
+          schema:
+            type: integer
+        - name: language
+          in: query
+          schema:
+            type: string
+        - name: passed
+          in: query
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Results list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultListResponse"
+
+  /results/{id}:
+    get:
+      operationId: getResult
+      tags: [results]
+      summary: Get result by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Result"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /results/dashboard:
+    get:
+      operationId: getDashboardStats
+      tags: [results]
+      summary: Get dashboard summary stats for current user
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /results/leaderboard:
+    get:
+      operationId: getLeaderboard
+      tags: [results]
+      summary: Get top performers leaderboard
+      parameters:
+        - name: language
+          in: query
+          schema:
+            type: string
+        - name: speedCategory
+          in: query
+          schema:
+            type: integer
+        - name: instituteId
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Leaderboard entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaderboardEntry"
+
+  # ─── CERTIFICATES ─────────────────────────────────────────────────────────────
+  /certificates:
+    get:
+      operationId: listCertificates
+      tags: [certificates]
+      summary: List certificates
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+        - name: language
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Certificates list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CertificateListResponse"
+
+    post:
+      operationId: generateCertificate
+      tags: [certificates]
+      summary: Generate a certificate for a passing result
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CertificateInput"
+      responses:
+        "201":
+          description: Generated certificate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Certificate"
+
+  /certificates/{id}:
+    get:
+      operationId: getCertificate
+      tags: [certificates]
+      summary: Get certificate by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Certificate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Certificate"
+
+  /certificates/verify/{verificationId}:
+    get:
+      operationId: verifyCertificate
+      tags: [certificates]
+      summary: Verify a certificate by verification ID (public)
+      parameters:
+        - name: verificationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Certificate verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CertificateVerification"
+        "404":
+          description: Invalid certificate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── SUBSCRIPTIONS ────────────────────────────────────────────────────────────
+  /subscriptions:
+    get:
+      operationId: listSubscriptions
+      tags: [subscriptions]
+      summary: List subscriptions (admin)
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+        - name: plan
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Subscriptions list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionListResponse"
+
+  /subscriptions/my:
+    get:
+      operationId: getMySubscription
+      tags: [subscriptions]
+      summary: Get current user's subscription
+      responses:
+        "200":
+          description: Current subscription
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+
+  /subscriptions/plans:
+    get:
+      operationId: getPlans
+      tags: [subscriptions]
+      summary: Get available subscription plans
+      responses:
+        "200":
+          description: Plans list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Plan"
+
+  /subscriptions/upgrade:
+    post:
+      operationId: upgradeSubscription
+      tags: [subscriptions]
+      summary: Upgrade subscription plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubscriptionUpgradeInput"
+      responses:
+        "200":
+          description: Upgraded subscription
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    SuccessResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    # ─── AUTH SCHEMAS ─────────────────────────────────────────────────────────
+    RegisterInput:
+      type: object
+      required: [email, password, name, role]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+        name:
+          type: string
+          minLength: 2
+        role:
+          type: string
+          enum: [student, teacher, institute_admin]
+        phone:
+          type: ["string", "null"]
+        instituteId:
+          type: ["integer", "null"]
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    RefreshTokenInput:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+
+    ChangePasswordInput:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 6
+
+    AuthResponse:
+      type: object
+      required: [accessToken, refreshToken, user]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+
+    # ─── USER SCHEMAS ─────────────────────────────────────────────────────────
+    User:
+      type: object
+      required: [id, email, name, role, isActive, subscriptionPlan, createdAt]
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [student, teacher, institute_admin, super_admin]
+        phone:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        subscriptionPlan:
+          type: string
+          enum: [free, pro_student, institute]
+        instituteId:
+          type: ["integer", "null"]
+        instituteName:
+          type: ["string", "null"]
+        avatarUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    UserUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+        phone:
+          type: ["string", "null"]
+        avatarUrl:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+
+    UserListResponse:
+      type: object
+      required: [users, total, page, limit]
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    # ─── INSTITUTE SCHEMAS ────────────────────────────────────────────────────
+    Institute:
+      type: object
+      required: [id, name, isActive, subscriptionPlan, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        address:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        logoUrl:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        subscriptionPlan:
+          type: string
+          enum: [free, institute]
+        studentCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    InstituteInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 2
+        address:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        logoUrl:
+          type: string
+
+    InstituteUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        logoUrl:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+
+    InstituteListResponse:
+      type: object
+      required: [institutes, total, page, limit]
+      properties:
+        institutes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Institute"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    InstituteStats:
+      type: object
+      required: [totalStudents, totalTests, totalCertificates, avgAccuracy, avgWpm]
+      properties:
+        totalStudents:
+          type: integer
+        totalTests:
+          type: integer
+        totalCertificates:
+          type: integer
+        avgAccuracy:
+          type: number
+        avgWpm:
+          type: number
+        passRate:
+          type: number
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityItem"
+
+    ActivityItem:
+      type: object
+      required: [type, description, createdAt]
+      properties:
+        type:
+          type: string
+        description:
+          type: string
+        userId:
+          type: ["integer", "null"]
+        userName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    # ─── BATCH SCHEMAS ────────────────────────────────────────────────────────
+    Batch:
+      type: object
+      required: [id, name, instituteId, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        instituteId:
+          type: integer
+        description:
+          type: ["string", "null"]
+        studentCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    BatchInput:
+      type: object
+      required: [name, instituteId]
+      properties:
+        name:
+          type: string
+          minLength: 2
+        instituteId:
+          type: integer
+        description:
+          type: string
+
+    BatchUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+
+    # ─── PASSAGE SCHEMAS ──────────────────────────────────────────────────────
+    Passage:
+      type: object
+      required: [id, title, content, language, difficulty, speedCategory, wordCount, createdAt]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+        language:
+          type: string
+          enum: [english, hindi, marathi]
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        speedCategory:
+          type: integer
+        wordCount:
+          type: integer
+        isActive:
+          type: boolean
+        createdBy:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    PassageInput:
+      type: object
+      required: [title, content, language, difficulty, speedCategory]
+      properties:
+        title:
+          type: string
+          minLength: 2
+        content:
+          type: string
+          minLength: 10
+        language:
+          type: string
+          enum: [english, hindi, marathi]
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        speedCategory:
+          type: integer
+          enum: [30, 40, 50, 60]
+
+    PassageUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        speedCategory:
+          type: integer
+        isActive:
+          type: boolean
+
+    PassageListResponse:
+      type: object
+      required: [passages, total, page, limit]
+      properties:
+        passages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Passage"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    # ─── TYPING SESSION SCHEMAS ───────────────────────────────────────────────
+    TypingSession:
+      type: object
+      required: [id, userId, passageId, language, status, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        passageId:
+          type: integer
+        language:
+          type: string
+          enum: [english, hindi, marathi]
+        status:
+          type: string
+          enum: [active, completed, abandoned]
+        grossWpm:
+          type: ["number", "null"]
+        netWpm:
+          type: ["number", "null"]
+        accuracy:
+          type: ["number", "null"]
+        totalChars:
+          type: ["integer", "null"]
+        correctChars:
+          type: ["integer", "null"]
+        incorrectChars:
+          type: ["integer", "null"]
+        backspaceCount:
+          type: ["integer", "null"]
+        durationSeconds:
+          type: ["integer", "null"]
+        passage:
+          $ref: "#/components/schemas/Passage"
+        createdAt:
+          type: string
+          format: date-time
+
+    TypingSessionInput:
+      type: object
+      required: [passageId, language]
+      properties:
+        passageId:
+          type: integer
+        language:
+          type: string
+          enum: [english, hindi, marathi]
+
+    TypingSessionUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [completed, abandoned]
+        grossWpm:
+          type: number
+        netWpm:
+          type: number
+        accuracy:
+          type: number
+        totalChars:
+          type: integer
+        correctChars:
+          type: integer
+        incorrectChars:
+          type: integer
+        backspaceCount:
+          type: integer
+        durationSeconds:
+          type: integer
+
+    TypingSessionListResponse:
+      type: object
+      required: [sessions, total, page, limit]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/TypingSession"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    TypingStats:
+      type: object
+      required: [totalSessions, avgWpm, avgAccuracy, bestWpm, totalPracticeMinutes]
+      properties:
+        totalSessions:
+          type: integer
+        avgWpm:
+          type: number
+        avgAccuracy:
+          type: number
+        bestWpm:
+          type: number
+        totalPracticeMinutes:
+          type: integer
+        byLanguage:
+          type: array
+          items:
+            $ref: "#/components/schemas/LanguageStat"
+        wpmTrend:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrendPoint"
+
+    LanguageStat:
+      type: object
+      required: [language, avgWpm, avgAccuracy, sessionCount]
+      properties:
+        language:
+          type: string
+        avgWpm:
+          type: number
+        avgAccuracy:
+          type: number
+        sessionCount:
+          type: integer
+
+    TrendPoint:
+      type: object
+      required: [date, wpm, accuracy]
+      properties:
+        date:
+          type: string
+        wpm:
+          type: number
+        accuracy:
+          type: number
+
+    # ─── TEST SCHEMAS ─────────────────────────────────────────────────────────
+    Test:
+      type: object
+      required: [id, name, language, speedCategory, durationMinutes, isActive, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        language:
+          type: string
+          enum: [english, hindi, marathi]
+        speedCategory:
+          type: integer
+        durationMinutes:
+          type: integer
+        isActive:
+          type: boolean
+        instituteId:
+          type: ["integer", "null"]
+        passageId:
+          type: ["integer", "null"]
+        useRandomPassage:
+          type: boolean
+        minAccuracy:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+
+    TestInput:
+      type: object
+      required: [name, language, speedCategory, durationMinutes]
+      properties:
+        name:
+          type: string
+          minLength: 2
+        description:
+          type: string
+        language:
+          type: string
+          enum: [english, hindi, marathi]
+        speedCategory:
+          type: integer
+          enum: [30, 40, 50, 60]
+        durationMinutes:
+          type: integer
+        passageId:
+          type: integer
+        useRandomPassage:
+          type: boolean
+        minAccuracy:
+          type: number
+        instituteId:
+          type: integer
+
+    TestUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        durationMinutes:
+          type: integer
+        minAccuracy:
+          type: number
+
+    TestListResponse:
+      type: object
+      required: [tests, total, page, limit]
+      properties:
+        tests:
+          type: array
+          items:
+            $ref: "#/components/schemas/Test"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    # ─── TEST ATTEMPT SCHEMAS ─────────────────────────────────────────────────
+    TestAttempt:
+      type: object
+      required: [id, userId, testId, passageId, status, startedAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        testId:
+          type: integer
+        passageId:
+          type: integer
+        status:
+          type: string
+          enum: [active, completed, abandoned, timed_out]
+        grossWpm:
+          type: ["number", "null"]
+        netWpm:
+          type: ["number", "null"]
+        accuracy:
+          type: ["number", "null"]
+        totalChars:
+          type: ["integer", "null"]
+        correctChars:
+          type: ["integer", "null"]
+        incorrectChars:
+          type: ["integer", "null"]
+        wrongWords:
+          type: ["integer", "null"]
+        backspaceCount:
+          type: ["integer", "null"]
+        durationSeconds:
+          type: ["integer", "null"]
+        passed:
+          type: ["boolean", "null"]
+        resultId:
+          type: ["integer", "null"]
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: ["string", "null"]
+        test:
+          $ref: "#/components/schemas/Test"
+        passage:
+          $ref: "#/components/schemas/Passage"
+
+    TestAttemptInput:
+      type: object
+      required: [testId]
+      properties:
+        testId:
+          type: integer
+
+    TestAttemptSubmit:
+      type: object
+      required: [status, grossWpm, netWpm, accuracy, totalChars, correctChars, incorrectChars]
+      properties:
+        status:
+          type: string
+          enum: [completed, abandoned, timed_out]
+        grossWpm:
+          type: number
+        netWpm:
+          type: number
+        accuracy:
+          type: number
+        totalChars:
+          type: integer
+        correctChars:
+          type: integer
+        incorrectChars:
+          type: integer
+        wrongWords:
+          type: integer
+        backspaceCount:
+          type: integer
+        durationSeconds:
+          type: integer
+
+    TestAttemptListResponse:
+      type: object
+      required: [attempts, total, page, limit]
+      properties:
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/TestAttempt"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    # ─── RESULT SCHEMAS ───────────────────────────────────────────────────────
+    Result:
+      type: object
+      required: [id, userId, testAttemptId, grossWpm, netWpm, accuracy, passed, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        testAttemptId:
+          type: integer
+        grossWpm:
+          type: number
+        netWpm:
+          type: number
+        accuracy:
+          type: number
+        totalChars:
+          type: integer
+        correctChars:
+          type: integer
+        incorrectChars:
+          type: integer
+        wrongWords:
+          type: integer
+        backspaceCount:
+          type: integer
+        durationSeconds:
+          type: integer
+        language:
+          type: string
+        speedCategory:
+          type: integer
+        passed:
+          type: boolean
+        certificateId:
+          type: ["integer", "null"]
+        userName:
+          type: string
+        testName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ResultListResponse:
+      type: object
+      required: [results, total, page, limit]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Result"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    DashboardStats:
+      type: object
+      required: [totalPracticeSessions, totalTestAttempts, bestNetWpm, avgAccuracy, certificatesEarned, streakDays]
+      properties:
+        totalPracticeSessions:
+          type: integer
+        totalTestAttempts:
+          type: integer
+        bestNetWpm:
+          type: number
+        avgAccuracy:
+          type: number
+        certificatesEarned:
+          type: integer
+        streakDays:
+          type: integer
+        recentResults:
+          type: array
+          items:
+            $ref: "#/components/schemas/Result"
+        wpmProgress:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrendPoint"
+        passRate:
+          type: number
+        byLanguage:
+          type: array
+          items:
+            $ref: "#/components/schemas/LanguageStat"
+
+    LeaderboardEntry:
+      type: object
+      required: [rank, userId, userName, netWpm, accuracy, language]
+      properties:
+        rank:
+          type: integer
+        userId:
+          type: integer
+        userName:
+          type: string
+        netWpm:
+          type: number
+        accuracy:
+          type: number
+        language:
+          type: string
+        instituteName:
+          type: ["string", "null"]
+
+    # ─── CERTIFICATE SCHEMAS ──────────────────────────────────────────────────
+    Certificate:
+      type: object
+      required: [id, userId, resultId, certificateNumber, verificationId, language, netWpm, accuracy, issuedAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        resultId:
+          type: integer
+        certificateNumber:
+          type: string
+        verificationId:
+          type: string
+        userName:
+          type: string
+        language:
+          type: string
+        speedCategory:
+          type: integer
+        netWpm:
+          type: number
+        accuracy:
+          type: number
+        instituteName:
+          type: ["string", "null"]
+        issuedAt:
+          type: string
+          format: date-time
+
+    CertificateInput:
+      type: object
+      required: [resultId]
+      properties:
+        resultId:
+          type: integer
+
+    CertificateListResponse:
+      type: object
+      required: [certificates, total, page, limit]
+      properties:
+        certificates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Certificate"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    CertificateVerification:
+      type: object
+      required: [valid, certificate]
+      properties:
+        valid:
+          type: boolean
+        certificate:
+          $ref: "#/components/schemas/Certificate"
+
+    # ─── SUBSCRIPTION SCHEMAS ─────────────────────────────────────────────────
+    Subscription:
+      type: object
+      required: [id, userId, plan, status, startedAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        plan:
+          type: string
+          enum: [free, pro_student, institute]
+        status:
+          type: string
+          enum: [active, expired, cancelled]
+        startedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: ["string", "null"]
+        features:
+          type: array
+          items:
+            type: string
+
+    SubscriptionListResponse:
+      type: object
+      required: [subscriptions, total, page, limit]
+      properties:
+        subscriptions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Subscription"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    SubscriptionUpgradeInput:
+      type: object
+      required: [plan]
+      properties:
+        plan:
+          type: string
+          enum: [pro_student, institute]
+
+    Plan:
+      type: object
+      required: [id, name, price, features]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        billingPeriod:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        isPopular:
+          type: boolean
