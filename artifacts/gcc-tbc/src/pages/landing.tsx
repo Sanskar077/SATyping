@@ -8,7 +8,7 @@ export default function Landing() {
       <header className="h-16 border-b border-border flex items-center justify-between px-6 lg:px-12">
         <div className="flex items-center gap-2">
           <Activity className="h-6 w-6 text-primary" />
-          <span className="font-bold text-xl tracking-tight">GCC-TBC Pro</span>
+          <span className="font-bold text-xl tracking-tight">SATyping</span>
         </div>
         <div className="flex items-center gap-4">
           <Link href="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
@@ -64,7 +64,7 @@ export default function Landing() {
       </main>
 
       <footer className="py-8 px-6 lg:px-12 border-t border-border flex flex-col md:flex-row items-center justify-between text-sm text-muted-foreground">
-        <div>&copy; 2024 GCC-TBC Pro. All rights reserved.</div>
+        <div>&copy; 2026 SATyping. All rights reserved.</div>
         <div className="flex gap-4 mt-4 md:mt-0">
           <Link href="/terms" className="hover:text-foreground">Terms</Link>
           <Link href="/privacy" className="hover:text-foreground">Privacy</Link>

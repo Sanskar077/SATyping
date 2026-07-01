@@ -69,7 +69,7 @@ function SidebarContent({ onClose }: SidebarProps) {
     <div className="flex flex-col h-full">
       <div className="h-16 flex items-center px-5 border-b border-border">
         <Activity className="h-5 w-5 text-primary mr-2 flex-shrink-0" />
-        <span className="font-bold text-base tracking-tight">GCC-TBC Pro</span>
+        <span className="font-bold text-base tracking-tight">SATyping</span>
         {onClose && (
           <button className="ml-auto text-muted-foreground hover:text-foreground" onClick={onClose}>
             <X className="h-5 w-5" />
@@ -158,7 +158,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4 md:hidden flex-shrink-0">
           <div className="flex items-center gap-2">
             <Activity className="h-5 w-5 text-primary" />
-            <span className="font-bold text-sm tracking-tight">GCC-TBC Pro</span>
+            <span className="font-bold text-sm tracking-tight">SATyping</span>
           </div>
           <button
             className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
