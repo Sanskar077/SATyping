@@ -1,4 +1,4 @@
-import { useGetInstitute, useGetInstituteStudents, useListTests, getGetInstituteQueryKey } from "@workspace/api-client-react";
+import { useGetInstitute, useGetInstituteStudents, useListTests, getGetInstituteQueryKey, getGetInstituteStudentsQueryKey, getListTestsQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/context/AuthContext";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -15,11 +15,12 @@ export default function InstituteDashboard() {
     query: { enabled: !!instituteId, queryKey: getGetInstituteQueryKey(instituteId) },
   });
   const { data: studentsData } = useGetInstituteStudents(instituteId, {
-    query: { enabled: !!instituteId },
+    query: { enabled: !!instituteId, queryKey: getGetInstituteStudentsQueryKey(instituteId) },
   });
+  const testsParams = { instituteId: instituteId || undefined };
   const { data: testsData } = useListTests(
-    { instituteId: instituteId || undefined },
-    { query: { enabled: !!instituteId } }
+    testsParams,
+    { query: { enabled: !!instituteId, queryKey: getListTestsQueryKey(testsParams) } }
   );
 
   const students = studentsData?.users ?? [];
@@ -30,7 +31,7 @@ export default function InstituteDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{institute?.name ?? "Institute Dashboard"}</h1>
-          <p className="text-muted-foreground mt-1">{institute?.city && `${institute.city} · `}{institute?.affiliationCode}</p>
+          <p className="text-muted-foreground mt-1">{institute?.address}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" asChild>
@@ -129,7 +130,7 @@ export default function InstituteDashboard() {
               <TableBody>
                 {tests.slice(0, 5).map(test => (
                   <TableRow key={test.id}>
-                    <TableCell className="font-medium">{test.title}</TableCell>
+                    <TableCell className="font-medium">{test.name}</TableCell>
                     <TableCell className="capitalize text-sm text-muted-foreground">{test.language}</TableCell>
                     <TableCell><Badge variant={test.isActive ? "default" : "secondary"} className="text-xs">{test.isActive ? "Active" : "Inactive"}</Badge></TableCell>
                   </TableRow>

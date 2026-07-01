@@ -51,7 +51,7 @@ export default function Profile() {
 
   const onProfileSubmit = (values: z.infer<typeof profileSchema>) => {
     if (!me) return;
-    updateUser.mutate({ params: { id: me.id }, data: { name: values.name, phone: values.phone ?? null, avatarUrl: values.avatarUrl ?? null } }, {
+    updateUser.mutate({ id: me.id, data: { name: values.name, phone: values.phone ?? null, avatarUrl: values.avatarUrl ?? null } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
         toast({ title: "Profile updated" });

@@ -30,7 +30,7 @@ export default function AdminUsers() {
   const updateUser = useUpdateUser();
 
   const handleRoleChange = (userId: number, newRole: string) => {
-    updateUser.mutate({ params: { id: userId }, data: { role: newRole } as Parameters<typeof updateUser.mutate>[0]["data"] }, {
+    updateUser.mutate({ id: userId, data: { role: newRole } as Parameters<typeof updateUser.mutate>[0]["data"] }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
         toast({ title: "User role updated" });

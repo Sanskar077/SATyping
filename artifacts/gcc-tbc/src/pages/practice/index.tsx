@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useCreateTypingSession, TypingSessionInputLanguage, useGetRandomPassage, GetRandomPassageLanguage, GetRandomPassageDifficulty } from "@workspace/api-client-react";
+import { useCreateTypingSession, TypingSessionInputLanguage, useGetRandomPassage, GetRandomPassageLanguage, GetRandomPassageDifficulty, getGetRandomPassageQueryKey } from "@workspace/api-client-react";
 import { Activity, Play, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -17,9 +17,12 @@ export default function Practice() {
   
   const createSession = useCreateTypingSession();
   
-  const { data: randomPassage, refetch: fetchPassage, isFetching } = useGetRandomPassage({
+  const randomPassageParams = { language, speedCategory: Number(speedCategory), difficulty };
+
+  const { data: randomPassage, refetch: fetchPassage, isFetching } = useGetRandomPassage(randomPassageParams, {
     query: {
       enabled: false,
+      queryKey: getGetRandomPassageQueryKey(randomPassageParams),
     }
   });
 

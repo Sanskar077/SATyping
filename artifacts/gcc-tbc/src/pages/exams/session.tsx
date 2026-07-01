@@ -66,6 +66,7 @@ export default function ExamSession() {
       }, 1000);
       return () => clearInterval(interval);
     }
+    return undefined;
   }, [hasStarted, isCompleted, timeRemaining]);
 
   // Keep input focused
@@ -87,7 +88,7 @@ export default function ExamSession() {
   }, [typedText, passageText, isCompleted]);
 
   const stats = useMemo(() => {
-    if (!passageText) return { wpm: 0, accuracy: 0, correctChars: 0, incorrectChars: 0 };
+    if (!passageText) return { grossWpm: 0, wpm: 0, accuracy: 0, correctChars: 0, incorrectChars: 0 };
     
     let correctChars = 0;
     let incorrectChars = 0;

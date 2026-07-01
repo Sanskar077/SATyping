@@ -1,0 +1,44 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+
+  "comment": [
+    "Vercel hosts the React frontend (gcc-tbc) as a static SPA.",
+    "The Express API server should be deployed separately on Render (or Railway,",
+    "Fly.io, etc.) and its URL set as VITE_API_BASE_URL below.",
+    "",
+    "Build & output settings are configured here so Vercel picks them up",
+    "automatically without requiring manual dashboard configuration."
+  ],
+
+  "buildCommand": "pnpm --filter @workspace/gcc-tbc run build",
+  "outputDirectory": "artifacts/gcc-tbc/dist/public",
+  "installCommand": "npm install -g pnpm && pnpm install --no-frozen-lockfile",
+  "framework": null,
+
+  "rewrites": [
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+  ],
+
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    }
+  ],
+
+  "env": {
+    "BASE_PATH": "/",
+    "NODE_ENV": "production"
+  }
+}

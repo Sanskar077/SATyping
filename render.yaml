@@ -1,0 +1,72 @@
+##############################################################################
+# render.yaml — Render Blueprint for SATyping
+#
+# Two services are declared:
+#   1. satyping-api   — Express API server (Web Service, Node 22)
+#   2. satyping-web   — React frontend    (Static Site, built with Vite)
+#
+# Environment variables marked `sync: false` must be set manually in the
+# Render dashboard (they contain secrets that should not live in source).
+##############################################################################
+
+services:
+  # --------------------------------------------------------------------------
+  # API Server
+  # --------------------------------------------------------------------------
+  - type: web
+    name: satyping-api
+    runtime: node
+    region: oregon
+    plan: free
+
+    # Render runs these from the repo root
+    buildCommand: >
+      npm install -g pnpm &&
+      pnpm install --no-frozen-lockfile &&
+      pnpm --filter @workspace/api-server run build
+
+    startCommand: node artifacts/api-server/dist/index.mjs
+
+    healthCheckPath: /api/health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000            # Render assigns this automatically; keep in sync
+      - key: DATABASE_URL
+        sync: false             # Set in Render dashboard → Environment
+      - key: SESSION_SECRET
+        sync: false             # Set in Render dashboard → Environment
+      - key: CORS_ORIGIN
+        sync: false             # e.g. https://your-app.vercel.app
+
+  # --------------------------------------------------------------------------
+  # Frontend Static Site
+  # --------------------------------------------------------------------------
+  - type: web
+    name: satyping-web
+    runtime: static
+    region: oregon
+    plan: free
+
+    buildCommand: >
+      npm install -g pnpm &&
+      pnpm install --no-frozen-lockfile &&
+      pnpm --filter @workspace/gcc-tbc run build
+
+    staticPublishPath: artifacts/gcc-tbc/dist/public
+
+    # Rewrite all paths to index.html for client-side routing (SPA)
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BASE_PATH
+        value: /
+      - key: VITE_API_BASE_URL
+        sync: false             # e.g. https://satyping-api.onrender.com

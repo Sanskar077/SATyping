@@ -2,7 +2,7 @@ import { useListResults } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import {
   Table,
-  Body,
+  TableBody,
   TableCell,
   TableHead,
   TableHeader,

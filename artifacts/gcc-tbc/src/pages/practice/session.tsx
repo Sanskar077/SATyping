@@ -45,6 +45,7 @@ export default function PracticeSession() {
       }, 1000);
       return () => clearInterval(interval);
     }
+    return undefined;
   }, [startTime, isCompleted]);
 
   // Keep input focused

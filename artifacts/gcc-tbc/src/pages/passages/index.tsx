@@ -32,7 +32,7 @@ export default function Passages() {
   const canManage = ["teacher", "institute_admin", "super_admin"].includes(user?.role ?? "");
 
   const handleDelete = (id: number) => {
-    deletePassage.mutate({ params: { id } }, {
+    deletePassage.mutate({ id }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListPassagesQueryKey() });
         toast({ title: "Passage deleted" });

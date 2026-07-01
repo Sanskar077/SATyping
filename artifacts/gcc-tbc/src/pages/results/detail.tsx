@@ -69,7 +69,7 @@ export default function ResultDetail() {
           )}
           <div>
             <h2 className="text-xl font-bold">{result.passed ? "Passed!" : "Not Passed"}</h2>
-            <p className="text-sm text-muted-foreground">{result.testName} — {langLabel[result.language] ?? result.language}</p>
+            <p className="text-sm text-muted-foreground">{result.testName} — {(result.language && langLabel[result.language]) ?? result.language}</p>
           </div>
           <Badge variant={result.passed ? "default" : "destructive"} className="ml-auto">
             {result.passed ? "PASS" : "FAIL"}
@@ -82,7 +82,7 @@ export default function ResultDetail() {
           { icon: <Zap className="h-5 w-5" />, label: "Net WPM", value: `${Math.round(result.netWpm)}`, mono: true },
           { icon: <Target className="h-5 w-5" />, label: "Accuracy", value: `${Math.round(result.accuracy)}%`, mono: true },
           { icon: <Zap className="h-5 w-5 opacity-50" />, label: "Gross WPM", value: `${Math.round(result.grossWpm)}`, mono: true },
-          { icon: <Clock className="h-5 w-5" />, label: "Duration", value: `${Math.round(result.durationSeconds / 60)}m ${result.durationSeconds % 60}s`, mono: false },
+          { icon: <Clock className="h-5 w-5" />, label: "Duration", value: `${Math.round((result.durationSeconds ?? 0) / 60)}m ${(result.durationSeconds ?? 0) % 60}s`, mono: false },
         ].map((stat, i) => (
           <Card key={i}>
             <CardContent className="p-4 text-center">

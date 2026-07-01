@@ -1,4 +1,4 @@
-import { useGetPlans, useUpgradeSubscription, useGetMySubscription, getGetMySubscriptionQueryKey, getGetPlansQueryKey } from "@workspace/api-client-react";
+import { useGetPlans, useUpgradeSubscription, useGetMySubscription, getGetMySubscriptionQueryKey, getGetPlansQueryKey, SubscriptionUpgradeInputPlan } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +24,7 @@ export default function Plans() {
   };
 
   const handleUpgrade = (planId: string) => {
-    upgradeMutation.mutate({ data: { plan: planId } }, {
+    upgradeMutation.mutate({ data: { plan: planId as SubscriptionUpgradeInputPlan } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetMySubscriptionQueryKey() });
         toast({ title: "Subscription upgraded!", description: `You are now on the ${planId} plan.` });

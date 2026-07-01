@@ -1,4 +1,4 @@
-import { useListTests, useCreateTest, useDeleteTest, getListTestsQueryKey } from "@workspace/api-client-react";
+import { useListTests, useCreateTest, useDeleteTest, getListTestsQueryKey, TestInputSpeedCategory } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { useState } from "react";
@@ -17,13 +17,12 @@ import { Plus, Trash2, BookOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const testSchema = z.object({
-  title: z.string().min(2, "Title is required"),
+  name: z.string().min(2, "Title is required"),
   language: z.string().min(1, "Language is required"),
   durationMinutes: z.coerce.number().int().min(1).max(120),
   passageId: z.coerce.number().int().positive("Passage is required"),
-  minWpm: z.coerce.number().int().min(1),
+  speedCategory: z.coerce.number().int().min(1) as unknown as z.ZodType<typeof TestInputSpeedCategory[keyof typeof TestInputSpeedCategory]>,
   minAccuracy: z.coerce.number().min(1).max(100),
-  totalMarks: z.coerce.number().int().min(1),
 });
 
 type TestFormValues = z.infer<typeof testSchema>;
@@ -47,13 +46,12 @@ export default function InstituteTests() {
   const form = useForm<TestFormValues>({
     resolver: zodResolver(testSchema),
     defaultValues: {
-      title: "",
+      name: "",
       language: "english",
       durationMinutes: 10,
       passageId: 1,
-      minWpm: 30,
+      speedCategory: TestInputSpeedCategory.NUMBER_30,
       minAccuracy: 80,
-      totalMarks: 100,
     },
   });
 
@@ -79,7 +77,7 @@ export default function InstituteTests() {
 
   const handleDelete = (id: number) => {
     deleteTest.mutate(
-      { params: { id } },
+      { id },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListTestsQueryKey(testParams) });
@@ -107,7 +105,7 @@ export default function InstituteTests() {
             <DialogHeader><DialogTitle>Create Test</DialogTitle></DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField control={form.control} name="title" render={({ field }) => (
+                <FormField control={form.control} name="name" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Test Title</FormLabel>
                     <FormControl><Input {...field} placeholder="e.g. English Typing Test - Batch A" /></FormControl>
@@ -138,9 +136,9 @@ export default function InstituteTests() {
                   )} />
                 </div>
                 <div className="grid grid-cols-3 gap-4">
-                  <FormField control={form.control} name="minWpm" render={({ field }) => (
+                  <FormField control={form.control} name="speedCategory" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Min WPM</FormLabel>
+                      <FormLabel>Speed Category (WPM)</FormLabel>
                       <FormControl><Input type="number" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
@@ -148,13 +146,6 @@ export default function InstituteTests() {
                   <FormField control={form.control} name="minAccuracy" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Min Accuracy %</FormLabel>
-                      <FormControl><Input type="number" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="totalMarks" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Total Marks</FormLabel>
                       <FormControl><Input type="number" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
@@ -193,7 +184,7 @@ export default function InstituteTests() {
                 <TableHead>Title</TableHead>
                 <TableHead>Language</TableHead>
                 <TableHead>Duration</TableHead>
-                <TableHead>Min WPM</TableHead>
+                <TableHead>Speed Cat.</TableHead>
                 <TableHead>Min Acc</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead></TableHead>
@@ -202,10 +193,10 @@ export default function InstituteTests() {
             <TableBody>
               {data.tests.map(test => (
                 <TableRow key={test.id}>
-                  <TableCell className="font-medium">{test.title}</TableCell>
+                  <TableCell className="font-medium">{test.name}</TableCell>
                   <TableCell className="capitalize text-muted-foreground">{test.language}</TableCell>
                   <TableCell className="text-muted-foreground">{test.durationMinutes}m</TableCell>
-                  <TableCell className="font-mono">{test.minWpm}</TableCell>
+                  <TableCell className="font-mono">{test.speedCategory}</TableCell>
                   <TableCell className="font-mono">{test.minAccuracy}%</TableCell>
                   <TableCell>
                     <Badge variant={test.isActive ? "default" : "secondary"} className="text-xs">

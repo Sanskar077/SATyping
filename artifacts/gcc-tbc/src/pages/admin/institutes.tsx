@@ -19,9 +19,6 @@ const instituteSchema = z.object({
   email: z.string().email("Valid email required"),
   phone: z.string().optional(),
   address: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  affiliationCode: z.string().optional(),
 });
 
 export default function AdminInstitutes() {
@@ -30,7 +27,7 @@ export default function AdminInstitutes() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useListInstitutes({
+  const { data, isLoading } = useListInstitutes(undefined, {
     query: { queryKey: getListInstitutesQueryKey() },
   });
 
@@ -38,11 +35,11 @@ export default function AdminInstitutes() {
 
   const form = useForm<z.infer<typeof instituteSchema>>({
     resolver: zodResolver(instituteSchema),
-    defaultValues: { name: "", email: "", phone: "", address: "", city: "", state: "", affiliationCode: "" },
+    defaultValues: { name: "", email: "", phone: "", address: "" },
   });
 
   const institutes = (data?.institutes ?? []).filter(i =>
-    !search || i.name.toLowerCase().includes(search.toLowerCase()) || i.email.toLowerCase().includes(search.toLowerCase())
+    !search || i.name.toLowerCase().includes(search.toLowerCase()) || (i.email ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
   const onSubmit = (values: z.infer<typeof instituteSchema>) => {
@@ -86,38 +83,13 @@ export default function AdminInstitutes() {
                     <FormMessage />
                   </FormItem>
                 )} />
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField control={form.control} name="phone" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Phone</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="affiliationCode" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Affiliation Code</FormLabel>
-                      <FormControl><Input {...field} placeholder="e.g. GCC-001" /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField control={form.control} name="city" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>City</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="state" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>State</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                </div>
+                <FormField control={form.control} name="phone" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
                 <FormField control={form.control} name="address" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Address</FormLabel>
@@ -155,8 +127,6 @@ export default function AdminInstitutes() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>City</TableHead>
-                <TableHead>Affiliation Code</TableHead>
                 <TableHead>Plan</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
@@ -166,8 +136,6 @@ export default function AdminInstitutes() {
                 <TableRow key={inst.id}>
                   <TableCell className="font-medium">{inst.name}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">{inst.email}</TableCell>
-                  <TableCell className="text-muted-foreground text-sm">{inst.city ?? "—"}</TableCell>
-                  <TableCell className="font-mono text-sm">{inst.affiliationCode ?? "—"}</TableCell>
                   <TableCell><Badge variant="outline" className="capitalize text-xs">{inst.subscriptionPlan}</Badge></TableCell>
                   <TableCell>
                     <Badge variant={inst.isActive ? "default" : "secondary"} className="text-xs">

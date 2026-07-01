@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 
 export default function AdminDashboard() {
   const { data: institutesData } = useListInstitutes();
-  const { data: usersData } = useListUsers({ query: { page: 1, limit: 1 } });
+  const { data: usersData } = useListUsers({ page: 1, limit: 1 });
 
   return (
     <div className="space-y-6" data-testid="admin-dashboard">
