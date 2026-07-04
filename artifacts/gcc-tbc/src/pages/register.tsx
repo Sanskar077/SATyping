@@ -90,7 +90,7 @@ export default function Register() {
           </div>
           <h2 className="text-2xl font-bold tracking-tight">Create an account</h2>
           <p className="text-sm text-muted-foreground mt-2">
-            Join SATyping to start your typing journey
+            Join GCC-TBC Pro to start your typing journey
           </p>
         </div>
 
@@ -103,7 +103,7 @@ export default function Register() {
                 <FormItem>
                   <FormLabel>Full Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Enter Name" {...field} />
+                    <Input placeholder="John Doe" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

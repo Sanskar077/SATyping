@@ -1,3 +1,7 @@
+// MUST be first — loads .env from workspace root before any other module runs.
+// lib/db checks DATABASE_URL at import time, so dotenv must fire before it.
+import "./env";
+
 import app from "./app";
 import { logger } from "./lib/logger";
 

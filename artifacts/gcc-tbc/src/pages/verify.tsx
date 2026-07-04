@@ -24,7 +24,7 @@ export default function VerifyCertificate() {
           <div className="flex justify-center mb-3">
             <Award className="h-10 w-10 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold">SATyping</h1>
+          <h1 className="text-2xl font-bold">GCC-TBC Pro</h1>
           <p className="text-muted-foreground text-sm mt-1">Certificate Verification</p>
         </div>
 
@@ -79,7 +79,7 @@ export default function VerifyCertificate() {
 
         <div className="text-center mt-6">
           <Button variant="ghost" asChild>
-            <Link href="/">Back to SATyping</Link>
+            <Link href="/">Back to GCC-TBC Pro</Link>
           </Button>
         </div>
       </div>

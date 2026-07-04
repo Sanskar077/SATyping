@@ -1,163 +1,89 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useCallback } from "react";
 import { useParams, useLocation } from "wouter";
-import { useGetTypingSession, getGetTypingSessionQueryKey, useUpdateTypingSession, TypingSessionUpdateStatus } from "@workspace/api-client-react";
+import {
+  useGetTypingSession,
+  getGetTypingSessionQueryKey,
+  useUpdateTypingSession,
+  TypingSessionUpdateStatus,
+} from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { AlertCircle, Clock, Activity, Target } from "lucide-react";
+import { Clock, Activity, Target, Zap } from "lucide-react";
+import { useTypingEngine, type TypingStats } from "@/hooks/use-typing-engine";
+import { TypingArea } from "@/components/typing-area";
 
 export default function PracticeSession() {
   const { sessionId } = useParams();
-  const id = parseInt(sessionId || "0", 10);
+  const id = parseInt(sessionId ?? "0", 10);
   const [, setLocation] = useLocation();
-  
+
   const { data: session, isLoading } = useGetTypingSession(id, {
-    query: {
-      enabled: !!id,
-      queryKey: getGetTypingSessionQueryKey(id),
-    }
+    query: { enabled: !!id, queryKey: getGetTypingSessionQueryKey(id) },
   });
 
   const updateSession = useUpdateTypingSession();
+  const passageText = session?.passage?.content ?? "";
+  const passageLanguage = session?.passage?.language ?? "marathi";
 
-  // Engine state
-  const [typedText, setTypedText] = useState("");
-  const [startTime, setStartTime] = useState<number | null>(null);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [isCompleted, setIsCompleted] = useState(false);
-  
-  const inputRef = useRef<HTMLInputElement>(null);
-  
-  const passageText = session?.passage?.content || "";
-  
-  // Start timer on first keypress
-  useEffect(() => {
-    if (typedText.length > 0 && !startTime && !isCompleted) {
-      setStartTime(Date.now());
-    }
-  }, [typedText, startTime, isCompleted]);
+  const handleComplete = useCallback(
+    (s: TypingStats, elapsedSeconds: number) => {
+      updateSession.mutate({
+        id,
+        data: {
+          status: TypingSessionUpdateStatus.completed,
+          grossWpm: s.grossWpm, netWpm: s.wpm, accuracy: s.accuracy,
+          totalChars: s.totalTyped, correctChars: s.correctChars,
+          incorrectChars: s.incorrectChars, durationSeconds: elapsedSeconds,
+        },
+      });
+    },
+    [id, updateSession]
+  );
 
-  // Update timer
-  useEffect(() => {
-    if (startTime && !isCompleted) {
-      const interval = setInterval(() => {
-        setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-    return undefined;
-  }, [startTime, isCompleted]);
+  // Engine always created with current passageText.
+  // When passageText="" (loading), appendChars rejects all input (passLen=0).
+  // Once passage loads, passageTextRef updates and typing starts working.
+  const engine = useTypingEngine({ passageText, language: passageLanguage, onComplete: handleComplete });
+  const { stats, elapsedSeconds, isCompleted } = engine;
 
-  // Keep input focused
-  useEffect(() => {
-    const handleClick = () => {
-      if (!isCompleted && inputRef.current) {
-        inputRef.current.focus();
-      }
-    };
-    document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
-  }, [isCompleted]);
-
-  // Auto-complete when text length matches
-  useEffect(() => {
-    if (passageText && typedText.length >= passageText.length && !isCompleted) {
-      handleComplete();
-    }
-  }, [typedText, passageText, isCompleted]);
-
-  const stats = useMemo(() => {
-    if (!passageText) return { wpm: 0, accuracy: 0, progress: 0 };
-    
-    let correctChars = 0;
-    let incorrectChars = 0;
-    
-    for (let i = 0; i < typedText.length; i++) {
-      if (typedText[i] === passageText[i]) correctChars++;
-      else incorrectChars++;
-    }
-    
-    const minutes = elapsedSeconds / 60;
-    const grossWpm = minutes > 0 ? Math.round((typedText.length / 5) / minutes) : 0;
-    const netWpm = minutes > 0 ? Math.round(((correctChars / 5) - incorrectChars) / minutes) : 0;
-    const accuracy = typedText.length > 0 ? Math.round((correctChars / typedText.length) * 100) : 100;
-    
-    return {
-      grossWpm: Math.max(0, grossWpm),
-      wpm: Math.max(0, netWpm),
-      accuracy,
-      correctChars,
-      incorrectChars,
-      progress: (typedText.length / passageText.length) * 100
-    };
-  }, [typedText, passageText, elapsedSeconds]);
-
-  const handleComplete = useCallback(() => {
-    if (isCompleted) return;
-    setIsCompleted(true);
-    
-    updateSession.mutate({
-      id,
-      data: {
-        status: TypingSessionUpdateStatus.completed,
-        grossWpm: stats.grossWpm,
-        netWpm: stats.wpm,
-        accuracy: stats.accuracy,
-        totalChars: typedText.length,
-        correctChars: stats.correctChars,
-        incorrectChars: stats.incorrectChars,
-        durationSeconds: elapsedSeconds,
-      }
-    });
-  }, [isCompleted, id, stats, typedText.length, elapsedSeconds, updateSession]);
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (isCompleted) return;
-    
-    // Prevent backspace from working natively, we handle it
-    if (e.key === 'Backspace') {
-      e.preventDefault();
-      setTypedText(prev => prev.slice(0, -1));
-    }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (isCompleted) return;
-    setTypedText(e.target.value);
-  };
-
-  if (isLoading) return <div>Loading session...</div>;
-  if (!session || !passageText) return <div>Session not found</div>;
-
-  if (session.status === 'completed' || isCompleted) {
+  // ── Full-screen loading ───────────────────────────────────────────────
+  if (isLoading) {
     return (
-      <div className="max-w-3xl mx-auto space-y-6 mt-12">
-        <Card className="border-primary">
-          <CardHeader className="text-center bg-primary/5 pb-8">
-            <CardTitle className="text-2xl font-bold">Session Completed</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-8">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-              <div>
-                <p className="text-muted-foreground text-sm font-medium">Net WPM</p>
-                <p className="text-4xl font-bold text-primary">{stats.wpm}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-sm font-medium">Accuracy</p>
-                <p className="text-4xl font-bold">{stats.accuracy}%</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-sm font-medium">Time</p>
-                <p className="text-4xl font-bold">{Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-sm font-medium">Errors</p>
-                <p className="text-4xl font-bold text-destructive">{stats.incorrectChars}</p>
-              </div>
+      <div className="max-w-5xl mx-auto space-y-4 mt-4">
+        <div className="h-12 bg-muted rounded animate-pulse" />
+        <Card className="border-2">
+          <CardContent className="p-8">
+            <div className="animate-pulse space-y-3">
+              <div className="h-8 bg-muted rounded w-full" />
+              <div className="h-8 bg-muted rounded w-11/12" />
+              <div className="h-8 bg-muted rounded w-4/5" />
             </div>
-            
-            <div className="mt-12 flex justify-center gap-4">
-              <Button onClick={() => setLocation("/dashboard")} variant="outline">Back to Dashboard</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Completed screen ──────────────────────────────────────────────────
+  if (isCompleted) {
+    return (
+      <div className="max-w-3xl mx-auto mt-12">
+        <Card>
+          <CardContent className="pt-8 pb-10 px-10">
+            <h2 className="text-2xl font-bold text-center mb-8">Session Complete!</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+              <Stat label="Net WPM"    value={stats.wpm}              color="text-primary" />
+              <Stat label="Gross WPM"  value={stats.grossWpm} />
+              <Stat label="Accuracy"   value={`${stats.accuracy}%`} />
+              <Stat label="Time"       value={fmt(elapsedSeconds)} />
+              <Stat label="CPM"        value={stats.cpm} />
+              <Stat label="Correct"    value={stats.correctChars}   color="text-green-600" />
+              <Stat label="Errors"     value={stats.incorrectChars} color="text-destructive" />
+              <Stat label="Total"      value={stats.totalTyped} />
+            </div>
+            <div className="mt-10 flex justify-center gap-4">
+              <Button variant="outline" onClick={() => setLocation("/dashboard")}>Dashboard</Button>
               <Button onClick={() => setLocation("/practice")}>Practice Again</Button>
             </div>
           </CardContent>
@@ -166,84 +92,61 @@ export default function PracticeSession() {
     );
   }
 
-  // Render passage with colors
-  const renderText = () => {
-    return passageText.split('').map((char, index) => {
-      let colorClass = "text-muted-foreground";
-      let bgClass = "";
-      
-      if (index < typedText.length) {
-        if (typedText[index] === char) {
-          colorClass = "text-green-600 dark:text-green-400";
-        } else {
-          colorClass = "text-destructive-foreground";
-          bgClass = "bg-destructive/80";
-        }
-      } else if (index === typedText.length) {
-        bgClass = "bg-primary/20 border-b-2 border-primary";
-        colorClass = "text-foreground";
-      }
-
-      return (
-        <span key={index} className={`${colorClass} ${bgClass} rounded-sm px-[1px] font-mono text-xl leading-relaxed whitespace-pre-wrap`}>
-          {char}
-        </span>
-      );
-    });
-  };
-
+  // ── Active session ────────────────────────────────────────────────────
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between bg-card p-4 rounded-lg border shadow-sm sticky top-0 z-10">
+    <div className="max-w-5xl mx-auto space-y-4">
+
+      {/* Stats bar */}
+      <div className="flex items-center justify-between bg-card px-6 py-3 rounded-lg border shadow-sm sticky top-0 z-20">
         <div className="flex gap-8">
-          <div className="flex items-center gap-2">
-            <Activity className="h-5 w-5 text-primary" />
-            <div className="text-2xl font-bold font-mono w-16">{stats.wpm} <span className="text-sm text-muted-foreground font-sans">WPM</span></div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Target className="h-5 w-5 text-primary" />
-            <div className="text-2xl font-bold font-mono w-16">{stats.accuracy}%</div>
-          </div>
+          <Pill icon={<Activity className="h-4 w-4 text-primary" />} label="WPM" value={stats.wpm} />
+          <Pill icon={<Target   className="h-4 w-4 text-primary" />} label="Acc" value={`${stats.accuracy}%`} />
+          <Pill icon={<Zap      className="h-4 w-4 text-primary" />} label="CPM" value={stats.cpm} />
         </div>
-        
-        <div className="flex items-center gap-2 text-xl font-mono">
-          <Clock className="h-5 w-5 text-muted-foreground" />
-          {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')}
+        <div className="flex items-center gap-2 font-mono text-lg font-semibold">
+          <Clock className="h-4 w-4 text-muted-foreground" />
+          {fmt(elapsedSeconds)}
         </div>
       </div>
-      
-      <Progress value={stats.progress} className="h-2" />
 
-      <Card className="shadow-lg border-2">
-        <CardContent className="p-8 min-h-[400px]">
-          {/* Hidden input to capture all typing */}
-          <input
-            ref={inputRef}
-            type="text"
-            className="opacity-0 absolute inset-0 -z-10 h-0 w-0"
-            value={typedText}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            autoFocus
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck="false"
-          />
-          
-          <div className="select-none" onClick={() => inputRef.current?.focus()}>
-            {renderText()}
-          </div>
+      <Progress value={stats.progress} className="h-1.5" />
+
+      {/* Passage card — TypingArea mounts HERE, textarea is definitely present */}
+      <Card className="shadow-md border-2">
+        <CardContent className="p-8 min-h-[280px]">
+          <TypingArea engine={engine} fontSize="text-2xl" />
         </CardContent>
       </Card>
-      
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <div className="flex items-center gap-1">
-          <AlertCircle className="h-4 w-4" />
-          Start typing to begin. Click the text area to focus.
-        </div>
-        <Button variant="ghost" onClick={handleComplete}>End Session Early</Button>
+
+      <div className="flex items-center justify-between text-sm text-muted-foreground px-1">
+        <span>
+          {engine.hasStarted
+            ? `${stats.totalTyped} / ${stats.totalPassage} chars typed`
+            : "Start typing to begin the session."}
+        </span>
+        <Button variant="ghost" size="sm" onClick={engine.complete}>End Early</Button>
       </div>
+    </div>
+  );
+}
+
+const fmt = (s: number) => `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
+
+function Stat({ label, value, color="" }: { label:string; value:string|number; color?:string }) {
+  return (
+    <div>
+      <p className="text-muted-foreground text-sm">{label}</p>
+      <p className={`text-3xl font-bold mt-1 ${color}`}>{value}</p>
+    </div>
+  );
+}
+
+function Pill({ icon, label, value }: { icon:React.ReactNode; label:string; value:string|number }) {
+  return (
+    <div className="flex items-center gap-2">
+      {icon}
+      <span className="text-xl font-bold font-mono">{value}</span>
+      <span className="text-xs text-muted-foreground">{label}</span>
     </div>
   );
 }

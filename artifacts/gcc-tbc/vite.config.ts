@@ -2,7 +2,6 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
-import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 const rawPort = process.env.PORT;
 
@@ -14,15 +13,22 @@ if (Number.isNaN(port) || port <= 0) {
 
 const basePath = process.env.BASE_PATH ?? "/";
 
+// In dev, proxy /api to the API server.
+// The API server port defaults to 3001; override with API_PORT env var if needed.
+const apiPort = process.env.API_PORT ? Number(process.env.API_PORT) : 3001;
+const apiTarget = process.env.VITE_API_BASE_URL ?? `http://localhost:${apiPort}`;
+
 export default defineConfig({
   base: basePath,
   plugins: [
     react(),
     tailwindcss(),
-    runtimeErrorOverlay(),
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
       ? [
+          await import("@replit/vite-plugin-runtime-error-modal").then((m) =>
+            m.default()
+          ),
           await import("@replit/vite-plugin-cartographer").then((m) =>
             m.cartographer({
               root: path.resolve(import.meta.dirname, ".."),
@@ -37,7 +43,6 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),
-      "@assets": path.resolve(import.meta.dirname, "..", "..", "attached_assets"),
     },
     dedupe: ["react", "react-dom"],
   },
@@ -54,6 +59,16 @@ export default defineConfig({
     fs: {
       strict: true,
     },
+    // Forward all /api/* requests to the Express API server during development.
+    // This means VITE_API_BASE_URL does NOT need to be set for local dev —
+    // the browser always talks to localhost:5000 and Vite proxies to localhost:3001.
+    proxy: {
+      "/api": {
+        target: apiTarget,
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
   preview: {
     port,
@@ -61,3 +76,4 @@ export default defineConfig({
     allowedHosts: true,
   },
 });
+

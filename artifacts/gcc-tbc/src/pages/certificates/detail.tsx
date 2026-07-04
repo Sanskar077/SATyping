@@ -57,7 +57,7 @@ export default function CertificateDetail() {
         </div>
 
         <p className="text-sm text-muted-foreground uppercase tracking-widest font-medium mb-1">Certificate of Achievement</p>
-        <h1 className="text-2xl font-bold mb-1">SATyping</h1>
+        <h1 className="text-2xl font-bold mb-1">GCC-TBC Pro</h1>
         <p className="text-sm text-muted-foreground mb-6">This certifies that</p>
 
         <h2 className="text-3xl font-bold text-primary mb-1">{cert.userName}</h2>
