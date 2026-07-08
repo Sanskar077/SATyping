@@ -1,7 +1,7 @@
 import { useListInstitutes, useListUsers } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Users, Shield, BookOpen } from "lucide-react";
+import { Building2, Users, Shield, BookOpen, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function AdminDashboard() {
@@ -90,6 +90,22 @@ export default function AdminDashboard() {
             </p>
             <Button variant="outline" asChild>
               <Link href="/passages">Manage Passages</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Upload className="h-4 w-4 text-primary" />
+              Bulk Import
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              Import passages in bulk from CSV or JSON. Validate before import.
+            </p>
+            <Button asChild>
+              <Link href="/admin/bulk-import">Open Bulk Import</Link>
             </Button>
           </CardContent>
         </Card>

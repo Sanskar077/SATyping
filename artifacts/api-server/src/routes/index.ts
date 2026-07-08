@@ -7,8 +7,8 @@ import passagesRouter from "./passages";
 import typingRouter from "./typing";
 import testsRouter from "./tests";
 import resultsRouter from "./results";
-import certificatesRouter from "./certificates";
 import subscriptionsRouter from "./subscriptions";
+import curriculumRouter from "./curriculum";
 
 const router: IRouter = Router();
 
@@ -20,7 +20,7 @@ router.use(passagesRouter);
 router.use(typingRouter);
 router.use(testsRouter);
 router.use(resultsRouter);
-router.use(certificatesRouter);
 router.use(subscriptionsRouter);
+router.use(curriculumRouter);
 
 export default router;

@@ -38,6 +38,8 @@ export default defineConfig({
     `${s}/certificates.ts`,
     `${s}/subscriptions.ts`,
     `${s}/refresh_tokens.ts`,
+    `${s}/lessons.ts`,
+    `${s}/lesson_completions.ts`,
   ],
   dialect: "postgresql",
   dbCredentials: {

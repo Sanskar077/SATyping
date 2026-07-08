@@ -16,6 +16,12 @@ export const typingSessionsTable = pgTable("typing_sessions", {
   incorrectChars: integer("incorrect_chars"),
   backspaceCount: integer("backspace_count"),
   durationSeconds: integer("duration_seconds"),
+  // Feature 1: Keystroke replay data (JSON array of {key, timestamp, isCorrect, composedText})
+  keystrokeData: text("keystroke_data"),
+  // Feature 4: WPM timeline for real-time graph (JSON array of {time, wpm, accuracy, errors})
+  wpmTimeline: text("wpm_timeline"),
+  // Feature 2: Raw user input for error diff analysis
+  userInput: text("user_input"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

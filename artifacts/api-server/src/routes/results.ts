@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, and, desc, SQL } from "drizzle-orm";
-import { db, resultsTable, usersTable, testAttemptsTable, testsTable, typingSessionsTable, certificatesTable } from "@workspace/db";
+import { db, resultsTable, usersTable, testAttemptsTable, testsTable, typingSessionsTable } from "@workspace/db";
 import { ListResultsQueryParams, GetResultParams, GetLeaderboardQueryParams } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth";
 
@@ -17,12 +17,88 @@ async function formatResult(r: typeof resultsTable.$inferSelect) {
     totalChars: r.totalChars, correctChars: r.correctChars, incorrectChars: r.incorrectChars,
     wrongWords: r.wrongWords, backspaceCount: r.backspaceCount, durationSeconds: r.durationSeconds,
     language: r.language, speedCategory: r.speedCategory, passed: r.passed,
-    certificateId: r.certificateId ?? null,
     userName: user?.name ?? "Unknown",
     testName: test?.name ?? "Unknown Test",
     createdAt: r.createdAt.toISOString(),
   };
 }
+
+// Feature 6: Personal Best Tracker Dashboard Widget
+router.get("/results/personal-bests", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
+
+  const sessions = await db.select().from(typingSessionsTable)
+    .where(and(eq(typingSessionsTable.userId, userId), eq(typingSessionsTable.status, "completed")));
+
+  const results = await db.select().from(resultsTable)
+    .where(eq(resultsTable.userId, userId))
+    .orderBy(desc(resultsTable.createdAt));
+
+  const highestWpm = results.length > 0 ? Math.max(...results.map(r => r.netWpm)) : 0;
+  const highestAccuracy = results.length > 0 ? Math.max(...results.map(r => r.accuracy)) : 0;
+  const bestGrossWpm = results.length > 0 ? Math.max(...results.map(r => r.grossWpm)) : 0;
+  const bestNetWpm = highestWpm;
+  const totalPracticeMinutes = Math.round(sessions.reduce((s, sess) => s + (sess.durationSeconds ?? 0), 0) / 60);
+  const totalCompletedTests = results.length;
+
+  // Weekly best (last 7 days)
+  const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+  const weeklyResults = results.filter(r => r.createdAt >= weekAgo);
+  const weeklyBest = weeklyResults.length > 0 ? Math.max(...weeklyResults.map(r => r.netWpm)) : null;
+
+  // Monthly best (last 30 days)
+  const monthAgo = new Date(); monthAgo.setDate(monthAgo.getDate() - 30);
+  const monthlyResults = results.filter(r => r.createdAt >= monthAgo);
+  const monthlyBest = monthlyResults.length > 0 ? Math.max(...monthlyResults.map(r => r.netWpm)) : null;
+
+  // Fastest improvement: biggest single-session WPM jump
+  let fastestImprovement = 0;
+  for (let i = 1; i < results.length; i++) {
+    const improvement = results[i - 1].netWpm - results[i].netWpm; // ordered desc
+    if (improvement > fastestImprovement) fastestImprovement = improvement;
+  }
+
+  // Longest streak: consecutive days with at least one completed session
+  let longestStreak = 0;
+  if (sessions.length > 0) {
+    const days = new Set(sessions.map(s => s.createdAt.toISOString().split("T")[0]));
+    const sorted = Array.from(days).sort();
+    let streak = 1;
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = new Date(sorted[i - 1]);
+      const curr = new Date(sorted[i]);
+      const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
+      if (diff === 1) { streak++; longestStreak = Math.max(longestStreak, streak); }
+      else streak = 1;
+    }
+    longestStreak = Math.max(longestStreak, streak);
+  }
+
+  const languages = ["english", "hindi", "marathi"];
+  const byLanguage = languages.map(lang => {
+    const langResults = results.filter(r => r.language === lang);
+    return {
+      language: lang,
+      avgWpm: langResults.length > 0 ? langResults.reduce((s, r) => s + r.netWpm, 0) / langResults.length : 0,
+      avgAccuracy: langResults.length > 0 ? langResults.reduce((s, r) => s + r.accuracy, 0) / langResults.length : 0,
+      sessionCount: langResults.length,
+    };
+  });
+
+  res.json({
+    highestWpm,
+    highestAccuracy,
+    bestGrossWpm,
+    bestNetWpm,
+    longestStreak,
+    totalPracticeMinutes,
+    totalCompletedTests,
+    fastestImprovement,
+    weeklyBest,
+    monthlyBest,
+    byLanguage,
+  });
+});
 
 router.get("/results/dashboard", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.userId;
@@ -37,7 +113,6 @@ router.get("/results/dashboard", requireAuth, async (req, res): Promise<void> =>
     .where(eq(resultsTable.userId, userId))
     .orderBy(desc(resultsTable.createdAt));
 
-  const certs = await db.select().from(certificatesTable).where(eq(certificatesTable.userId, userId));
 
   const bestNetWpm = results.length > 0 ? Math.max(...results.map(r => r.netWpm)) : 0;
   const avgAccuracy = results.length > 0 ? results.reduce((s, r) => s + r.accuracy, 0) / results.length : 0;
@@ -67,7 +142,6 @@ router.get("/results/dashboard", requireAuth, async (req, res): Promise<void> =>
     totalTestAttempts: attempts.length,
     bestNetWpm,
     avgAccuracy: Math.round(avgAccuracy * 100) / 100,
-    certificatesEarned: certs.length,
     streakDays: 0,
     recentResults: recentFormatted,
     wpmProgress,

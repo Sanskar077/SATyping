@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, ilike, and, SQL, sql } from "drizzle-orm";
-import { db, institutesTable, usersTable, batchesTable, testAttemptsTable, certificatesTable, resultsTable } from "@workspace/db";
+import { db, institutesTable, usersTable, batchesTable, testAttemptsTable, resultsTable } from "@workspace/db";
 import {
   ListInstitutesQueryParams, CreateInstituteBody, GetInstituteParams, UpdateInstituteParams,
   UpdateInstituteBody, DeleteInstituteParams, GetInstituteStudentsParams, GetInstituteStatsParams,
@@ -140,9 +140,6 @@ router.get("/institutes/:id/stats", requireAuth, async (req, res): Promise<void>
   );
 
   const studentIds = students.map(s => s.id);
-  const certs = await db.select().from(certificatesTable).where(
-    studentIds.length > 0 ? sql`${certificatesTable.userId} = ANY(${studentIds})` : sql`false`
-  );
 
   const results = await db.select().from(resultsTable).where(
     studentIds.length > 0 ? sql`${resultsTable.userId} = ANY(${studentIds})` : sql`false`
@@ -156,7 +153,6 @@ router.get("/institutes/:id/stats", requireAuth, async (req, res): Promise<void>
   res.json({
     totalStudents: students.length,
     totalTests: results.length,
-    totalCertificates: certs.length,
     avgAccuracy: Math.round(avgAccuracy * 100) / 100,
     avgWpm: Math.round(avgWpm * 100) / 100,
     passRate: Math.round(passRate * 100) / 100,

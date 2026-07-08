@@ -24,15 +24,10 @@
  * If 'w' pressed before a vowel or non-consonant: flush ि first then char.
  * If Backspace pressed while pendingPreI: cancel buffer (nothing removed).
  */
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import type { TypingEngineResult } from "@/hooks/use-typing-engine";
-import {
-  REMINGTON_MAP,
-  PRE_I_SENTINEL,
-  PRE_I_MATRA,
-  DEVANAGARI_CONSONANTS,
-  resolveKey,
-} from "@/lib/ism-remington-map";
+import { REMINGTON_MAP } from "@/lib/ism-remington-map";
+import { attachTypingKeyHandlers } from "@/lib/typing-key-handler";
 
 interface Props {
   engine:     TypingEngineResult;
@@ -52,145 +47,17 @@ export function TypingArea({
     appendChars, handleBackspace, language,
   } = engine;
 
-  // ── Pre-consonant ि buffer (Marathi mode only) ────────────────────────
-  const pendingPreI = useRef(false);
-
   // ── Attach DOM event listeners ────────────────────────────────────────
+  // Delegates to the SAME key-resolution logic used by the Typing Notepad —
+  // see src/lib/typing-key-handler.ts. Exam/practice mode keeps the default
+  // anti-cheat behaviour (allowClipboard is omitted → defaults to false).
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return undefined;
 
-    // ── MARATHI MODE ──────────────────────────────────────────────────────
-    if (language === "marathi") {
-
-      const onKeyDown = (e: KeyboardEvent) => {
-        if (isCompleted) return;
-
-        // Always block paste / undo / cut / select-all
-        if ((e.ctrlKey || e.metaKey) && ["a","c","v","x","z","y"].includes(e.key.toLowerCase())) {
-          e.preventDefault(); return;
-        }
-
-        // Block cursor movement (we own the caret model)
-        if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End","Delete","Tab"].includes(e.key)) {
-          e.preventDefault(); return;
-        }
-
-        // ── Backspace ──────────────────────────────────────────────────
-        if (e.key === "Backspace") {
-          e.preventDefault();
-          if (pendingPreI.current) {
-            // Cancel the buffered ि — nothing removed from typedText
-            pendingPreI.current = false;
-          } else {
-            handleBackspace();
-          }
-          return;
-        }
-
-        // ── Space ─────────────────────────────────────────────────────
-        if (e.code === "Space" || e.key === " ") {
-          e.preventDefault();
-          if (pendingPreI.current) {
-            pendingPreI.current = false;
-            appendChars(PRE_I_MATRA + " "); // flush ि then space
-          } else {
-            appendChars(" ");
-          }
-          return;
-        }
-
-        // ── Ignore pure modifier key presses ──────────────────────────
-        if (["Shift","Control","Alt","Meta","CapsLock","Escape","Enter","Process"].includes(e.key)) {
-          return;
-        }
-
-        // ── Look up in Remington map ───────────────────────────────────
-        const mapped = resolveKey(e);
-        if (mapped === null) { e.preventDefault(); return; }
-
-        e.preventDefault(); // Always prevent ASCII insertion in Marathi mode
-
-        // ── PRE-CONSONANT ि handling ─────────────────────────────────
-        if (mapped === PRE_I_SENTINEL) {
-          if (pendingPreI.current) {
-            // Double ि press: commit first ि, stay buffered for second
-            appendChars(PRE_I_MATRA);
-            // pendingPreI stays true
-          } else {
-            pendingPreI.current = true;
-          }
-          return;
-        }
-
-        // ── Regular character ─────────────────────────────────────────
-        if (pendingPreI.current) {
-          pendingPreI.current = false;
-          if (DEVANAGARI_CONSONANTS.has(mapped)) {
-            // Consonant: reorder → consonant FIRST, then ि
-            appendChars(mapped + PRE_I_MATRA);
-          } else {
-            // Vowel / matra / digit / punctuation: flush ि, then new char
-            appendChars(PRE_I_MATRA + mapped);
-          }
-        } else {
-          appendChars(mapped);
-        }
-      };
-
-      // In Marathi mode, ignore input events entirely (we handle via keydown)
-      const onInput = (e: Event) => { e.stopPropagation(); };
-
-      ta.addEventListener("keydown", onKeyDown);
-      ta.addEventListener("input",   onInput, true); // capture phase
-
-      return () => {
-        ta.removeEventListener("keydown", onKeyDown);
-        ta.removeEventListener("input",   onInput, true);
-        pendingPreI.current = false;
-      };
-    }
-
-    // ── ENGLISH MODE ──────────────────────────────────────────────────────
-    {
-      let composing = false;
-
-      const onCompositionStart = () => { composing = true; };
-      const onCompositionEnd   = (e: CompositionEvent) => {
-        composing = false;
-        if (e.data) appendChars(e.data);
-        requestAnimationFrame(() => { ta.value = ""; });
-      };
-
-      const onInput = (e: Event) => {
-        if (composing) return;
-        const data = (e as InputEvent).data;
-        if (!data) return;
-        appendChars(data);
-        requestAnimationFrame(() => { ta.value = ""; });
-      };
-
-      const onKeyDown = (e: KeyboardEvent) => {
-        if (isCompleted) return;
-        if (e.key === "Backspace") { e.preventDefault(); handleBackspace(); return; }
-        if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End","Delete"].includes(e.key))
-          e.preventDefault();
-        if ((e.ctrlKey || e.metaKey) && ["a","c","v","x","z","y"].includes(e.key.toLowerCase()))
-          e.preventDefault();
-      };
-
-      ta.addEventListener("compositionstart", onCompositionStart);
-      ta.addEventListener("compositionend",   onCompositionEnd);
-      ta.addEventListener("input",            onInput);
-      ta.addEventListener("keydown",          onKeyDown);
-
-      return () => {
-        ta.removeEventListener("compositionstart", onCompositionStart);
-        ta.removeEventListener("compositionend",   onCompositionEnd);
-        ta.removeEventListener("input",            onInput);
-        ta.removeEventListener("keydown",          onKeyDown);
-      };
-    }
+    return attachTypingKeyHandlers(ta, {
+      language, isCompleted, appendChars, handleBackspace,
+    });
   }, [language, isCompleted, appendChars, handleBackspace, textareaRef]);
 
   // ── Focus management ──────────────────────────────────────────────────
@@ -224,7 +91,7 @@ export function TypingArea({
   const isMarathi = language === "marathi";
 
   return (
-    <div className={`relative ${className}`}>
+    <div className={`relative w-full overflow-hidden ${className}`}>
       {/*
         UNCONTROLLED textarea — full-size transparent overlay.
         - In Marathi mode: captures keydown; prevents all ASCII insertion.
@@ -249,20 +116,31 @@ export function TypingArea({
         Passage rendered grapheme-cluster by cluster.
         Each Devanagari akshara (including multi-codepoint conjuncts)
         gets one <span> so highlighting is visually exact.
+
+        IMPORTANT layout rules:
+        - whiteSpace: pre-wrap   → preserves spacing while allowing line wraps
+        - overflowWrap: break-word → breaks long conjuncts at container edge
+        - wordBreak: break-word  → fallback for older engines
+        Spaces are rendered as regular U+0020 (not \u00A0) so the browser
+        can wrap lines at word boundaries. Non-breaking space prevented wrapping
+        and caused the horizontal scroll seen in the screenshot.
       */}
       <div
-        className="relative z-0 select-none"
+        className="relative z-0 select-none w-full"
         style={{
           fontFamily:    isMarathi
             ? "'Noto Sans Devanagari', 'Mangal', 'Kokila', 'Arial Unicode MS', sans-serif"
             : "'Courier New', 'Courier', monospace",
           lineHeight:    "2.4",
           letterSpacing: isMarathi ? "0.03em" : "0.05em",
+          whiteSpace:    "pre-wrap",
+          overflowWrap:  "break-word",
+          wordBreak:     "break-word",
         }}
       >
         {passageGraphemes.map((cluster, i) => (
           <span key={i} className={clusterClass(getClusterState(i), fontSize)}>
-            {cluster === " " ? "\u00A0" : cluster}
+            {cluster}
           </span>
         ))}
       </div>

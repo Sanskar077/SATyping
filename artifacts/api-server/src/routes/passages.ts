@@ -132,4 +132,100 @@ router.delete("/passages/:id", requireAuth, requireRole("teacher", "institute_ad
   res.sendStatus(204);
 });
 
+// Feature 9: Admin Passage Bulk Import Matrix
+router.post("/passages/bulk-validate", requireAuth, requireRole("teacher", "institute_admin", "super_admin"), async (req, res): Promise<void> => {
+  const { passages } = req.body as { passages: Array<{title: string; content: string; language: string; difficulty: string; speedCategory: number}> };
+
+  if (!Array.isArray(passages)) {
+    res.status(400).json({ error: "passages must be an array" });
+    return;
+  }
+
+  const validLanguages = ["english", "hindi", "marathi"];
+  const validDifficulties = ["easy", "medium", "hard"];
+  const validSpeedCategories = [30, 40, 50, 60];
+
+  const errors: Array<{row: number; field: string; message: string}> = [];
+  const duplicates: Array<{row: number; title: string; existingId: number}> = [];
+  const valid: typeof passages = [];
+
+  for (let i = 0; i < passages.length; i++) {
+    const p = passages[i];
+    const rowErrors: string[] = [];
+
+    if (!p.title || p.title.trim().length < 2) errors.push({ row: i + 1, field: "title", message: "Title must be at least 2 characters" });
+    if (!p.content || p.content.trim().length < 10) errors.push({ row: i + 1, field: "content", message: "Content must be at least 10 characters" });
+    if (!validLanguages.includes(p.language)) errors.push({ row: i + 1, field: "language", message: `Language must be one of: ${validLanguages.join(", ")}` });
+    if (!validDifficulties.includes(p.difficulty)) errors.push({ row: i + 1, field: "difficulty", message: `Difficulty must be one of: ${validDifficulties.join(", ")}` });
+    if (!validSpeedCategories.includes(p.speedCategory)) errors.push({ row: i + 1, field: "speedCategory", message: `Speed category must be one of: ${validSpeedCategories.join(", ")}` });
+
+    if (rowErrors.length === 0) {
+      // Check for duplicate title
+      const [existing] = await db.select().from(passagesTable).where(ilike(passagesTable.title, p.title.trim()));
+      if (existing) {
+        duplicates.push({ row: i + 1, title: p.title, existingId: existing.id });
+      } else {
+        valid.push(p);
+      }
+    }
+  }
+
+  res.json({
+    valid,
+    errors,
+    duplicates,
+    validCount: valid.length,
+    errorCount: errors.length,
+    duplicateCount: duplicates.length,
+  });
+});
+
+router.post("/passages/bulk-import", requireAuth, requireRole("teacher", "institute_admin", "super_admin"), async (req, res): Promise<void> => {
+  const { passages, skipDuplicates = true } = req.body as {
+    passages: Array<{title: string; content: string; language: string; difficulty: string; speedCategory: number}>;
+    skipDuplicates?: boolean;
+  };
+
+  if (!Array.isArray(passages) || passages.length === 0) {
+    res.status(400).json({ error: "passages must be a non-empty array" });
+    return;
+  }
+
+  const imported: typeof passagesTable.$inferSelect[] = [];
+  const errors: Array<{row: number; field: string; message: string}> = [];
+  let skipped = 0;
+
+  for (let i = 0; i < passages.length; i++) {
+    const p = passages[i];
+    try {
+      if (skipDuplicates) {
+        const [existing] = await db.select().from(passagesTable).where(ilike(passagesTable.title, p.title.trim()));
+        if (existing) { skipped++; continue; }
+      }
+
+      const wordCount = countWords(p.content);
+      const [passage] = await db.insert(passagesTable).values({
+        title: p.title.trim(),
+        content: p.content.trim(),
+        language: p.language,
+        difficulty: p.difficulty,
+        speedCategory: p.speedCategory,
+        wordCount,
+        createdBy: req.user!.userId,
+      }).returning();
+
+      imported.push(passage);
+    } catch (err) {
+      errors.push({ row: i + 1, field: "db", message: `Import failed: ${(err as Error).message}` });
+    }
+  }
+
+  res.status(201).json({
+    imported: imported.length,
+    skipped,
+    errors,
+    passages: imported.map(formatPassage),
+  });
+});
+
 export default router;

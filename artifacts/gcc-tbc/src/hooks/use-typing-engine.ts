@@ -48,13 +48,21 @@ export interface TypingEngineResult {
   // ── Called by TypingArea ──────────────────────────────────────────────────
   appendChars:    (chars: string) => void;
   handleBackspace: () => void;
+  // ── Free-mode only (Notepad): direct text control ─────────────────────────
+  setText:        (text: string) => void;
+  reset:          () => void;
 }
 
 interface Options {
   passageText:      string;
-  language?:        string;    // 'marathi' | 'english' | undefined (auto-detect)
+  language?:        string;    // 'marathi' | 'hindi' | 'english' | undefined (auto-detect)
   durationSeconds?: number;
   onComplete?:      (stats: TypingStats, elapsed: number) => void;
+  /**
+   * Free-typing mode (Typing Notepad): disables the passage-length cap and
+   * completion-on-finish behaviour. Exams/practice/drills never pass this.
+   */
+  freeMode?:        boolean;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -64,6 +72,7 @@ export function useTypingEngine({
   language: langProp,
   durationSeconds,
   onComplete,
+  freeMode = false,
 }: Options): TypingEngineResult {
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -113,6 +122,18 @@ export function useTypingEngine({
     const totalPassage = passageGraphemes.length;
     const totalTyped   = typedGraphemes.length;
 
+    // Notepad (freeMode): no passage to compare against — just speed/volume.
+    if (freeMode) {
+      const mins = elapsedSeconds > 0 ? elapsedSeconds / 60 : 1 / 60;
+      const grossWpm = totalTyped ? Math.max(0, Math.round((totalTyped / 5) / mins)) : 0;
+      const cpm      = totalTyped ? Math.max(0, Math.round(totalTyped / mins)) : 0;
+      return {
+        grossWpm, wpm: grossWpm, cpm, accuracy: 100,
+        correctChars: totalTyped, incorrectChars: 0,
+        totalTyped, totalPassage: 0, progress: 0,
+      };
+    }
+
     if (!totalTyped || !totalPassage) {
       return {
         grossWpm: 0, wpm: 0, cpm: 0, accuracy: 100,
@@ -140,7 +161,7 @@ export function useTypingEngine({
       correctChars: correct, incorrectChars: incorrect,
       totalTyped, totalPassage, progress,
     };
-  }, [typedGraphemes, passageGraphemes, elapsedSeconds]);
+  }, [typedGraphemes, passageGraphemes, elapsedSeconds, freeMode]);
 
   // ── Complete ──────────────────────────────────────────────────────────
   const handleComplete = useCallback(() => {
@@ -155,10 +176,11 @@ export function useTypingEngine({
 
   // Auto-complete when passage finished
   useEffect(() => {
+    if (freeMode) return;
     if (!isCompleted && passageGraphemes.length > 0 &&
         typedGraphemes.length >= passageGraphemes.length)
       handleComplete();
-  }, [typedGraphemes.length, passageGraphemes.length, isCompleted, handleComplete]);
+  }, [typedGraphemes.length, passageGraphemes.length, isCompleted, handleComplete, freeMode]);
 
   // Countdown auto-complete (exam mode)
   useEffect(() => {
@@ -168,17 +190,20 @@ export function useTypingEngine({
   }, [elapsedSeconds, durationSeconds, startTime, isCompleted, handleComplete]);
 
   // ── Public handlers called by TypingArea ──────────────────────────────
+  // `freeMode` (used by the Typing Notepad) disables the passage-length cap
+  // so typing is never blocked — there is no passage to finish against.
   const appendChars = useCallback((chars: string) => {
     if (!chars || isCompleted) return;
     const norm = chars.normalize("NFC");
     setStartTime((p) => p ?? Date.now());
     setTypedText((prev) => {
-      const next    = prev + norm;
+      const next = prev + norm;
+      if (freeMode) return next;
       const nextG   = toGraphemes(next);
       const passLen = toGraphemes(passageTextRef.current.normalize("NFC")).length;
       return nextG.length > passLen ? prev : next;
     });
-  }, [isCompleted]);
+  }, [isCompleted, freeMode]);
 
   const handleBackspace = useCallback(() => {
     if (isCompleted) return;
@@ -187,6 +212,21 @@ export function useTypingEngine({
       return g.length ? g.slice(0, -1).join("") : "";
     });
   }, [isCompleted]);
+
+  // ── Free-mode only helpers (Notepad: load/clear/paste/undo-redo) ───────
+  // Never used by exams/practice — those only ever call appendChars/
+  // handleBackspace above, preserving existing anti-cheat guarantees.
+  const setText = useCallback((text: string) => {
+    setStartTime((p) => p ?? (text ? Date.now() : p));
+    setTypedText(text.normalize("NFC"));
+  }, []);
+
+  const reset = useCallback(() => {
+    setTypedText("");
+    setStartTime(null);
+    setElapsedSeconds(0);
+    setIsCompleted(false);
+  }, []);
 
   // ── Cluster state for rendering ───────────────────────────────────────
   const getClusterState = useCallback(
@@ -205,6 +245,6 @@ export function useTypingEngine({
     textareaRef, typedText, passageGraphemes, typedGraphemes,
     stats, elapsedSeconds, hasStarted, isCompleted, language,
     complete: handleComplete, getClusterState,
-    appendChars, handleBackspace,
+    appendChars, handleBackspace, setText, reset,
   };
 }

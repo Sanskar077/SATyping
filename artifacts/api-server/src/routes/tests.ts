@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, and, desc, SQL } from "drizzle-orm";
-import { db, testsTable, testAttemptsTable, passagesTable, resultsTable, usersTable, certificatesTable } from "@workspace/db";
+import { db, testsTable, testAttemptsTable, passagesTable, resultsTable, usersTable } from "@workspace/db";
 import {
   ListTestsQueryParams, CreateTestBody, GetTestParams, UpdateTestParams,
   UpdateTestBody, DeleteTestParams, ListTestAttemptsQueryParams, CreateTestAttemptBody,

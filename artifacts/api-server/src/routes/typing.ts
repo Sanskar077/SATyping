@@ -25,6 +25,10 @@ function formatSession(s: typeof typingSessionsTable.$inferSelect, passage?: typ
     accuracy: s.accuracy ?? null, totalChars: s.totalChars ?? null,
     correctChars: s.correctChars ?? null, incorrectChars: s.incorrectChars ?? null,
     backspaceCount: s.backspaceCount ?? null, durationSeconds: s.durationSeconds ?? null,
+    // Feature 1, 2, 4: new session data fields
+    keystrokeData: s.keystrokeData ?? null,
+    wpmTimeline: s.wpmTimeline ?? null,
+    userInput: s.userInput ?? null,
     passage: passage ? formatPassage(passage) : undefined,
     createdAt: s.createdAt.toISOString(),
   };

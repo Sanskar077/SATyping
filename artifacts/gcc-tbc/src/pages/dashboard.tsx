@@ -4,6 +4,7 @@ import { Activity, Target, Trophy, Clock, ChevronRight } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { PersonalBestWidget } from "@/components/personal-best-widget";
 
 export default function Dashboard() {
   const { data: stats, isLoading } = useGetDashboardStats({
@@ -36,6 +37,9 @@ export default function Dashboard() {
           <p className="text-muted-foreground mt-1">Overview of your typing performance.</p>
         </div>
         <div className="flex gap-3">
+          <Button variant="outline" asChild>
+            <Link href="/practice/drills">Speed Drills</Link>
+          </Button>
           <Button asChild>
             <Link href="/practice">Practice Now</Link>
           </Button>
@@ -79,99 +83,129 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Certificates</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Test Pass Rate</CardTitle>
             <Trophy className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats?.certificatesEarned || 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">Total earned</p>
+            <div className="text-3xl font-bold">{stats?.passRate ? `${stats.passRate.toFixed(0)}%` : '0%'}</div>
+            <p className="text-xs text-muted-foreground mt-1">Of all test attempts</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Chart */}
-        <Card className="col-span-1 lg:col-span-2">
+      {/* Feature 6: Personal Best Widget */}
+      <PersonalBestWidget />
+
+      {/* WPM Progress Chart */}
+      {stats?.wpmProgress && stats.wpmProgress.length > 0 && (
+        <Card>
           <CardHeader>
-            <CardTitle>WPM Progress</CardTitle>
+            <CardTitle className="text-base">WPM Progress</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px] w-full">
-              {stats?.wpmProgress && stats.wpmProgress.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={stats.wpmProgress} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis 
-                      dataKey="date" 
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(value) => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                    />
-                    <YAxis 
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
-                      labelFormatter={(label) => new Date(label).toLocaleDateString()}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="wpm" 
-                      stroke="hsl(var(--primary))" 
-                      strokeWidth={3}
-                      dot={{ r: 4, fill: 'hsl(var(--card))', strokeWidth: 2 }}
-                      activeDot={{ r: 6, fill: 'hsl(var(--primary))' }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-muted-foreground">
-                  Not enough data to display chart.
-                </div>
-              )}
-            </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={stats.wpmProgress}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip
+                  contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: "6px" }}
+                />
+                <Line type="monotone" dataKey="wpm" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
+      )}
 
-        {/* Recent Results */}
-        <Card className="col-span-1">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Recent Tests</CardTitle>
-            <Button variant="ghost" size="sm" asChild className="h-8 text-xs">
-              <Link href="/results">View All <ChevronRight className="h-3 w-3 ml-1" /></Link>
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {stats?.recentResults && stats.recentResults.length > 0 ? (
-                stats.recentResults.map((result) => (
-                  <div key={result.id} className="flex items-center justify-between border-b border-border pb-4 last:border-0 last:pb-0">
-                    <div>
-                      <div className="font-medium text-sm">{result.testName || 'Practice Session'}</div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {new Date(result.createdAt).toLocaleDateString()} • {result.language}
-                      </div>
+      {/* By Language */}
+      {stats?.byLanguage && (
+        <div>
+          <h2 className="text-lg font-semibold mb-3">Performance by Language</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {stats.byLanguage.map((lang) => (
+              <Card key={lang.language} className={lang.sessionCount === 0 ? "opacity-50" : ""}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="font-medium capitalize">{lang.language}</span>
+                    <span className="text-xs text-muted-foreground">{lang.sessionCount} sessions</span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Avg WPM</span>
+                      <span className="font-mono font-bold">{Math.round(lang.avgWpm)}</span>
                     </div>
-                    <div className="text-right">
-                      <div className="font-bold">{result.netWpm} WPM</div>
-                      <div className={`text-xs mt-1 ${result.passed ? 'text-green-500' : 'text-destructive'}`}>
-                        {result.accuracy}% Acc
-                      </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Avg Accuracy</span>
+                      <span className="font-mono">{Math.round(lang.avgAccuracy)}%</span>
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-6 text-muted-foreground text-sm">
-                  No recent tests found.
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Quick Actions */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Quick Actions</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            { href: "/practice",       label: "Free Practice",    sub: "Choose any passage" },
+            { href: "/practice/drills", label: "Speed Drills",    sub: "Timed tier practice" },
+            { href: "/curriculum",     label: "Curriculum",       sub: "Structured lessons" },
+            { href: "/exams",          label: "Take an Exam",     sub: "Official test mode" },
+          ].map(({ href, label, sub }) => (
+            <Link key={href} href={href}>
+              <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-sm">{label}</p>
+                    <p className="text-xs text-muted-foreground">{sub}</p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
       </div>
+
+      {/* Recent Results */}
+      {stats?.recentResults && stats.recentResults.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold">Recent Results</h2>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/results">View All <ChevronRight className="h-4 w-4 ml-1" /></Link>
+            </Button>
+          </div>
+          <div className="space-y-2">
+            {stats.recentResults.map((r) => (
+              <Card key={r.id}>
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-sm">{r.testName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(r.createdAt).toLocaleDateString()} · {r.language}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4 text-right">
+                    <div>
+                      <p className="font-mono font-bold">{Math.round(r.netWpm)} WPM</p>
+                      <p className="text-xs text-muted-foreground">{Math.round(r.accuracy)}% acc</p>
+                    </div>
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href={`/results/${r.id}`}><ChevronRight className="h-4 w-4" /></Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

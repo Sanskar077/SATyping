@@ -1,23 +1,52 @@
 # See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
 
-# Environment secrets — never commit these
+# ── Environment secrets — never commit these ────────────────────────────────
 .env
 .env.local
 .env.*.local
 process/.env
+!.env.example
 
-# compiled output
-dist
-tmp
-out-tsc
+# ── Dependencies ─────────────────────────────────────────────────────────────
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# ── Build outputs (all workspace packages: artifacts/*, lib/*, scripts) ─────
+dist/
+**/dist/
+build/
+**/build/
+out-tsc/
+.next/
+**/.next/
+.turbo/
+**/.turbo/
+.vercel
+tmp/
 *.tsbuildinfo
 .expo
 .expo-shared
 
-# dependencies
-node_modules
+# ── Test / coverage ──────────────────────────────────────────────────────────
+/coverage
+**/coverage/
+*.lcov
+test-results/
+playwright-report/
 
-# IDEs and editors
+# ── Logs & temp files ────────────────────────────────────────────────────────
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+testem.log
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+
+# ── IDEs and editors ─────────────────────────────────────────────────────────
 /.idea
 .project
 .classpath
@@ -33,23 +62,24 @@ node_modules
 !.vscode/launch.json
 !.vscode/extensions.json
 
-# misc
+# ── Misc build caches ────────────────────────────────────────────────────────
 /.sass-cache
 /connect.lock
-/coverage
 /libpeerconnection.log
-npm-debug.log
-yarn-error.log
-testem.log
 /typings
+.cache/
+**/.cache/
+.local/
 
-# System Files
+# ── System files ─────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+desktop.ini
 
+# ── Replit / platform artifacts (not part of the deployable app) ────────────
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
+**/.replit-artifact/
 
-# Replit
-.cache/
-.local/
+# ── Packaging output (this project's own release zips) ──────────────────────
+*.zip

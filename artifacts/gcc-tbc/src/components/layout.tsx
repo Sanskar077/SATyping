@@ -2,8 +2,9 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import {
-  Activity, User, BookOpen, FileText, Award, LogOut,
-  LayoutDashboard, Settings, Building2, Shield, Zap, Menu, X,
+  Activity, User, BookOpen, FileText,
+  LogOut, LayoutDashboard, Settings,
+  Building2, Shield, Menu, X, GraduationCap, History, Timer, Upload, NotebookPen,
 } from "lucide-react";
 import { useLogout } from "@workspace/api-client-react";
 import { useState } from "react";
@@ -16,15 +17,22 @@ interface NavItem {
 
 function buildNavItems(role: string): NavItem[] {
   const base: NavItem[] = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/practice", label: "Practice", icon: Activity },
-    { href: "/exams", label: "Exams", icon: FileText },
-    { href: "/results", label: "Results", icon: BookOpen },
-    { href: "/certificates", label: "Certificates", icon: Award },
+    { href: "/dashboard",      label: "Dashboard",  icon: LayoutDashboard },
+    { href: "/practice",       label: "Practice",   icon: Activity },
+    { href: "/practice/drills", label: "Drills",    icon: Timer },       // Feature 3
+    { href: "/notepad",        label: "Notepad",    icon: NotebookPen },
+    { href: "/curriculum",     label: "Curriculum", icon: GraduationCap }, // Feature 5
+    { href: "/exams",          label: "Exams",      icon: FileText },
+    { href: "/results",        label: "Results",    icon: BookOpen },
+    { href: "/sessions",       label: "Sessions",   icon: History },     // Feature 8
   ];
 
   if (role === "teacher" || role === "institute_admin" || role === "super_admin") {
     base.push({ href: "/passages", label: "Passages", icon: BookOpen });
+  }
+
+  if (role === "teacher" || role === "institute_admin" || role === "super_admin") {
+    base.push({ href: "/admin/bulk-import", label: "Bulk Import", icon: Upload }); // Feature 9
   }
 
   if (role === "institute_admin" || role === "super_admin") {
@@ -38,9 +46,7 @@ function buildNavItems(role: string): NavItem[] {
   return base;
 }
 
-interface SidebarProps {
-  onClose?: () => void;
-}
+interface SidebarProps { onClose?: () => void; }
 
 function SidebarContent({ onClose }: SidebarProps) {
   const { user, logout } = useAuth();
@@ -51,18 +57,15 @@ function SidebarContent({ onClose }: SidebarProps) {
 
   const handleLogout = () => {
     logoutMutation.mutate(undefined, {
-      onSettled: () => {
-        logout();
-        setLocation("/login");
-      },
+      onSettled: () => { logout(); setLocation("/login"); },
     });
   };
 
   const roleLabel: Record<string, string> = {
-    student: "Student",
-    teacher: "Teacher",
+    student:        "Student",
+    teacher:        "Teacher",
     institute_admin: "Institute Admin",
-    super_admin: "Super Admin",
+    super_admin:    "Super Admin",
   };
 
   return (
@@ -114,9 +117,7 @@ function SidebarContent({ onClose }: SidebarProps) {
         </div>
         <div className="flex gap-2">
           <Button
-            variant="outline"
-            size="sm"
-            className="flex-1 text-xs"
+            variant="outline" size="sm" className="flex-1 text-xs"
             onClick={() => { setLocation("/profile"); onClose?.(); }}
           >
             <Settings className="h-3.5 w-3.5 mr-1.5" />
@@ -133,7 +134,6 @@ function SidebarContent({ onClose }: SidebarProps) {
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [, setLocation] = useLocation();
 
   return (
     <div className="min-h-screen flex bg-muted/30">
@@ -168,7 +168,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </button>
         </header>
 
-        <div className="flex-1 overflow-auto p-5 md:p-8">
+        <div className="flex-1 overflow-x-hidden overflow-y-auto p-5 md:p-8 min-w-0">
           {children}
         </div>
       </main>

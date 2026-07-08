@@ -1270,6 +1270,124 @@ paths:
               schema:
                 $ref: "#/components/schemas/Subscription"
 
+  # ─── PERSONAL BESTS (Feature 6) ──────────────────────────────────────────────
+  /results/personal-bests:
+    get:
+      operationId: getPersonalBests
+      tags: [results]
+      summary: Get personal best stats for the current user
+      responses:
+        "200":
+          description: Personal bests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersonalBests"
+
+  # ─── CURRICULUM & LESSONS (Feature 5) ─────────────────────────────────────────
+  /curriculum/{language}:
+    get:
+      operationId: getCurriculumPath
+      tags: [typing]
+      summary: Get curriculum path for a language with user progress
+      parameters:
+        - name: language
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [english, hindi, marathi]
+      responses:
+        "200":
+          description: Curriculum path with lessons and progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurriculumPath"
+
+  /lessons:
+    get:
+      operationId: listLessons
+      tags: [typing]
+      summary: List all lessons with optional language filter
+      parameters:
+        - name: language
+          in: query
+          schema:
+            type: string
+            enum: [english, hindi, marathi]
+      responses:
+        "200":
+          description: Lessons list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonListResponse"
+
+  /lessons/{id}/complete:
+    post:
+      operationId: completeLesson
+      tags: [typing]
+      summary: Mark a lesson as completed with result metrics
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LessonCompleteInput"
+      responses:
+        "201":
+          description: Lesson completion recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonCompletion"
+
+  # ─── BULK PASSAGE IMPORT (Feature 9) ──────────────────────────────────────────
+  /passages/bulk-validate:
+    post:
+      operationId: bulkValidatePassages
+      tags: [passages]
+      summary: Validate passages before bulk import (dry-run)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkImportInput"
+      responses:
+        "200":
+          description: Validation result with warnings and errors
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkImportValidation"
+
+  /passages/bulk-import:
+    post:
+      operationId: bulkImportPassages
+      tags: [passages]
+      summary: Execute bulk passage import after validation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkImportInput"
+      responses:
+        "201":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkImportResult"
+
 components:
   schemas:
     HealthStatus:
@@ -1675,6 +1793,15 @@ components:
           type: ["integer", "null"]
         durationSeconds:
           type: ["integer", "null"]
+        keystrokeData:
+          type: ["string", "null"]
+          description: JSON array of keystroke entries for replay (Feature 1)
+        wpmTimeline:
+          type: ["string", "null"]
+          description: JSON array of WPM snapshots for real-time graph (Feature 4)
+        userInput:
+          type: ["string", "null"]
+          description: Raw user input text for error diff analysis (Feature 2)
         passage:
           $ref: "#/components/schemas/Passage"
         createdAt:
@@ -1714,6 +1841,15 @@ components:
           type: integer
         durationSeconds:
           type: integer
+        keystrokeData:
+          type: string
+          description: JSON array of keystroke entries for replay
+        wpmTimeline:
+          type: string
+          description: JSON array of WPM snapshots for the timeline graph
+        userInput:
+          type: string
+          description: Raw user input text for error diff analysis
 
     TypingSessionListResponse:
       type: object
@@ -2198,3 +2334,225 @@ components:
             type: string
         isPopular:
           type: boolean
+
+    # ─── PERSONAL BESTS SCHEMAS (Feature 6) ───────────────────────────────────
+    PersonalBests:
+      type: object
+      required: [highestWpm, highestAccuracy, bestGrossWpm, bestNetWpm, longestStreak, totalPracticeMinutes, totalCompletedTests]
+      properties:
+        highestWpm:
+          type: number
+        highestAccuracy:
+          type: number
+        bestGrossWpm:
+          type: number
+        bestNetWpm:
+          type: number
+        longestStreak:
+          type: integer
+        totalPracticeMinutes:
+          type: integer
+        totalCompletedTests:
+          type: integer
+        fastestImprovement:
+          type: number
+        weeklyBest:
+          type: ["number", "null"]
+        monthlyBest:
+          type: ["number", "null"]
+        byLanguage:
+          type: array
+          items:
+            $ref: "#/components/schemas/LanguageStat"
+
+    # ─── CURRICULUM SCHEMAS (Feature 5) ─────────────────────────────────────────
+    LessonItem:
+      type: object
+      required: [id, language, category, title, content, orderIndex, minAccuracy, minWpm, isLocked]
+      properties:
+        id:
+          type: integer
+        language:
+          type: string
+          enum: [english, hindi, marathi]
+        category:
+          type: string
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        content:
+          type: string
+        targetKeys:
+          type: ["string", "null"]
+        orderIndex:
+          type: integer
+        minAccuracy:
+          type: number
+        minWpm:
+          type: number
+        isLocked:
+          type: boolean
+        isCompleted:
+          type: boolean
+        bestAccuracy:
+          type: ["number", "null"]
+        bestWpm:
+          type: ["number", "null"]
+        completionCount:
+          type: integer
+
+    LessonListResponse:
+      type: object
+      required: [lessons, total]
+      properties:
+        lessons:
+          type: array
+          items:
+            $ref: "#/components/schemas/LessonItem"
+        total:
+          type: integer
+
+    CurriculumPath:
+      type: object
+      required: [language, categories, totalLessons, completedLessons]
+      properties:
+        language:
+          type: string
+          enum: [english, hindi, marathi]
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurriculumCategory"
+        totalLessons:
+          type: integer
+        completedLessons:
+          type: integer
+
+    CurriculumCategory:
+      type: object
+      required: [name, label, lessons]
+      properties:
+        name:
+          type: string
+        label:
+          type: string
+        lessons:
+          type: array
+          items:
+            $ref: "#/components/schemas/LessonItem"
+
+    LessonCompletion:
+      type: object
+      required: [id, lessonId, accuracy, wpm, completedAt]
+      properties:
+        id:
+          type: integer
+        lessonId:
+          type: integer
+        accuracy:
+          type: number
+        wpm:
+          type: number
+        completedAt:
+          type: string
+          format: date-time
+
+    LessonCompleteInput:
+      type: object
+      required: [accuracy, wpm]
+      properties:
+        accuracy:
+          type: number
+        wpm:
+          type: number
+
+    # ─── BULK IMPORT SCHEMAS (Feature 9) ─────────────────────────────────────────
+    BulkPassageRow:
+      type: object
+      required: [title, content, language, difficulty, speedCategory]
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        language:
+          type: string
+          enum: [english, hindi, marathi]
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        speedCategory:
+          type: integer
+          enum: [30, 40, 50, 60]
+
+    BulkImportInput:
+      type: object
+      required: [passages]
+      properties:
+        passages:
+          type: array
+          items:
+            $ref: "#/components/schemas/BulkPassageRow"
+
+    ValidationError:
+      type: object
+      required: [row, field, message]
+      properties:
+        row:
+          type: integer
+        field:
+          type: string
+        message:
+          type: string
+
+    DuplicateWarning:
+      type: object
+      required: [row, title, existingId]
+      properties:
+        row:
+          type: integer
+        title:
+          type: string
+        existingId:
+          type: integer
+
+    BulkImportValidation:
+      type: object
+      required: [valid, errors, duplicates, validCount]
+      properties:
+        valid:
+          type: array
+          items:
+            $ref: "#/components/schemas/BulkPassageRow"
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationError"
+        duplicates:
+          type: array
+          items:
+            $ref: "#/components/schemas/DuplicateWarning"
+        validCount:
+          type: integer
+        errorCount:
+          type: integer
+        duplicateCount:
+          type: integer
+
+    BulkImportResult:
+      type: object
+      required: [imported, skipped, errors]
+      properties:
+        imported:
+          type: integer
+        skipped:
+          type: integer
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationError"
+        passages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Passage"

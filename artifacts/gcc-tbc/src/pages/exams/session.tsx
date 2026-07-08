@@ -120,10 +120,10 @@ export default function ExamSession() {
   // ── Loading attempt data ──────────────────────────────────────────────
   if (isLoading || !passageText) {
     return (
-      <div className="max-w-5xl mx-auto space-y-4 mt-4">
+      <div className="w-full max-w-5xl mx-auto space-y-4 mt-4 overflow-hidden">
         <div className="h-12 bg-muted rounded animate-pulse" />
-        <Card className="border-2">
-          <CardContent className="p-8">
+        <Card className="border-2 w-full overflow-hidden">
+          <CardContent className="p-6 md:p-8">
             <div className="animate-pulse space-y-3">
               <div className="h-8 bg-muted rounded w-full" />
               <div className="h-8 bg-muted rounded w-11/12" />
@@ -137,10 +137,10 @@ export default function ExamSession() {
 
   // ── Active exam ───────────────────────────────────────────────────────
   return (
-    <div className="max-w-5xl mx-auto space-y-4">
+    <div className="w-full max-w-5xl mx-auto space-y-4 overflow-hidden">
 
       {/* Timer header */}
-      <div className="flex items-center justify-between bg-card px-6 py-3 rounded-lg border shadow-sm sticky top-0 z-20">
+      <div className="flex items-center justify-between bg-card px-6 py-3 rounded-lg border shadow-sm sticky top-0 z-20 w-full overflow-hidden">
         <div>
           <p className="font-semibold">{attempt?.test?.name}</p>
           <p className="text-xs text-muted-foreground capitalize">
@@ -158,8 +158,8 @@ export default function ExamSession() {
       <Progress value={engine.stats.progress} className="h-1.5" />
 
       {/* Passage card */}
-      <Card className="shadow-md border-2">
-        <CardContent className="p-8 min-h-[280px]">
+      <Card className="shadow-md border-2 w-full overflow-hidden">
+        <CardContent className="p-6 md:p-8 min-h-[280px]">
           <TypingArea engine={engine} fontSize="text-2xl" />
         </CardContent>
       </Card>
