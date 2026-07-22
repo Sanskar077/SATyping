@@ -9,6 +9,15 @@ import testsRouter from "./tests";
 import resultsRouter from "./results";
 import subscriptionsRouter from "./subscriptions";
 import curriculumRouter from "./curriculum";
+import certificatesRouter from "./certificates";
+import plansRouter from "./plans";
+import offersRouter from "./offers";
+import commissionsRouter from "./commissions";
+import paymentsRouter from "./payments";
+import invoicesRouter from "./invoices";
+import notificationsRouter from "./notifications";
+import activityRouter from "./activity";
+import analyticsRouter from "./analytics";
 
 const router: IRouter = Router();
 
@@ -22,5 +31,14 @@ router.use(testsRouter);
 router.use(resultsRouter);
 router.use(subscriptionsRouter);
 router.use(curriculumRouter);
+router.use(certificatesRouter);
+router.use(plansRouter);
+router.use(offersRouter);
+router.use(commissionsRouter);
+router.use(paymentsRouter);
+router.use(invoicesRouter);
+router.use(notificationsRouter);
+router.use(activityRouter);
+router.use(analyticsRouter);
 
 export default router;

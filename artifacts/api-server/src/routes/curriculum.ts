@@ -8,6 +8,8 @@ import {
   CompleteLessonBody,
 } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth";
+import { requireActiveAccess } from "../lib/roles";
+import { getOwnAccountAccess } from "../lib/account-status";
 
 const router = Router();
 
@@ -63,7 +65,7 @@ function formatLessonItem(
   };
 }
 
-router.get("/curriculum/:language", requireAuth, async (req, res): Promise<void> => {
+router.get("/curriculum/:language", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const parsed = GetCurriculumPathParams.safeParse(req.params);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -129,7 +131,7 @@ router.get("/curriculum/:language", requireAuth, async (req, res): Promise<void>
   });
 });
 
-router.get("/lessons", requireAuth, async (req, res): Promise<void> => {
+router.get("/lessons", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const parsed = ListLessonsQueryParams.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -157,7 +159,7 @@ router.get("/lessons", requireAuth, async (req, res): Promise<void> => {
   res.json({ lessons: items, total: items.length });
 });
 
-router.post("/lessons/:id/complete", requireAuth, async (req, res): Promise<void> => {
+router.post("/lessons/:id/complete", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const parsedParams = CompleteLessonParams.safeParse(req.params);
   if (!parsedParams.success) {
     res.status(400).json({ error: parsedParams.error.message });

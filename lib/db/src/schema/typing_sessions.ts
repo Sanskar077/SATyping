@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, real, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, real, boolean, timestamp, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -24,7 +24,10 @@ export const typingSessionsTable = pgTable("typing_sessions", {
   userInput: text("user_input"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => ({
+  userIdIdx: index("typing_sessions_user_id_idx").on(table.userId),
+  passageIdIdx: index("typing_sessions_passage_id_idx").on(table.passageId),
+}));
 
 export const insertTypingSessionSchema = createInsertSchema(typingSessionsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertTypingSession = z.infer<typeof insertTypingSessionSchema>;

@@ -49,7 +49,11 @@ export default function Login() {
             title: "Success",
             description: "Logged in successfully",
           });
-          setLocation("/dashboard");
+          const destinationByRole: Record<string, string> = {
+            institute_admin: "/institute/dashboard",
+            super_admin: "/admin",
+          };
+          setLocation(destinationByRole[res.user.role] ?? "/dashboard");
         },
         onError: (err: any) => {
           const msg =
@@ -105,7 +109,9 @@ export default function Login() {
                 <FormItem>
                   <div className="flex items-center justify-between">
                     <FormLabel>Password</FormLabel>
-                    {/* Add forgot password link here if needed */}
+                    <Link href="/forgot-password" className="text-xs text-primary hover:underline">
+                      Forgot password?
+                    </Link>
                   </div>
                   <FormControl>
                     <Input placeholder="••••••••" type="password" {...field} />

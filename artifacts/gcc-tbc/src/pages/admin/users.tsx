@@ -1,10 +1,11 @@
-import { useListUsers, useUpdateUser, getListUsersQueryKey } from "@workspace/api-client-react";
+import { useListUsers, useUpdateUser, useSetUserPremium, getListUsersQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Users } from "lucide-react";
@@ -28,6 +29,17 @@ export default function AdminUsers() {
   });
 
   const updateUser = useUpdateUser();
+  const setPremium = useSetUserPremium();
+
+  const handlePremiumToggle = (userId: number, premium: boolean) => {
+    setPremium.mutate({ id: userId, data: { premium } }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
+        toast({ title: premium ? "Premium granted" : "Premium revoked" });
+      },
+      onError: () => toast({ title: "Failed to update Premium status", variant: "destructive" }),
+    });
+  };
 
   const handleRoleChange = (userId: number, newRole: string) => {
     updateUser.mutate({ id: userId, data: { role: newRole } as Parameters<typeof updateUser.mutate>[0]["data"] }, {
@@ -90,6 +102,8 @@ export default function AdminUsers() {
                 <TableHead>Plan</TableHead>
                 <TableHead>Joined</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Access</TableHead>
+                <TableHead>Premium (Manual)</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -123,6 +137,28 @@ export default function AdminUsers() {
                     <Badge variant={u.isActive ? "default" : "secondary"} className="text-xs">
                       {u.isActive ? "Active" : "Inactive"}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={u.hasAccess ? "default" : "outline"} className="text-xs">
+                      {u.hasAccess ? "Has access" : "No access"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {u.role === "super_admin" ? (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={u.premiumGrantedByOwner}
+                          onCheckedChange={(checked) => handlePremiumToggle(u.id, checked)}
+                          disabled={setPremium.isPending}
+                          data-testid={`switch-premium-${u.id}`}
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {u.premiumGrantedByOwner ? "Premium" : "Normal"}
+                        </span>
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

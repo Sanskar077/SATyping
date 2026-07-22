@@ -1,8 +1,10 @@
 import { Router } from "express";
-import { eq, and, SQL } from "drizzle-orm";
+import { eq, and, SQL, count } from "drizzle-orm";
 import { db, certificatesTable, resultsTable, usersTable, institutesTable } from "@workspace/db";
 import { ListCertificatesQueryParams, GenerateCertificateBody, GetCertificateParams, VerifyCertificateParams } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth";
+import { requireActiveAccess } from "../lib/roles";
+import { getOwnAccountAccess } from "../lib/account-status";
 import { randomUUID } from "crypto";
 
 const router = Router();
@@ -32,7 +34,7 @@ async function formatCertificate(c: typeof certificatesTable.$inferSelect) {
   };
 }
 
-router.get("/certificates", requireAuth, async (req, res): Promise<void> => {
+router.get("/certificates", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const params = ListCertificatesQueryParams.safeParse(req.query);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -48,13 +50,13 @@ router.get("/certificates", requireAuth, async (req, res): Promise<void> => {
   const where = and(...conditions);
 
   const certs = await db.select().from(certificatesTable).where(where).limit(limit).offset(offset);
-  const all = await db.select().from(certificatesTable).where(where);
+  const [{ value: total }] = await db.select({ value: count() }).from(certificatesTable).where(where);
 
   const formatted = await Promise.all(certs.map(formatCertificate));
-  res.json({ certificates: formatted, total: all.length, page, limit });
+  res.json({ certificates: formatted, total, page, limit });
 });
 
-router.post("/certificates", requireAuth, async (req, res): Promise<void> => {
+router.post("/certificates", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const parsed = GenerateCertificateBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -114,7 +116,7 @@ router.get("/certificates/verify/:verificationId", async (req, res): Promise<voi
   res.json({ valid: true, certificate: formatted });
 });
 
-router.get("/certificates/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/certificates/:id", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
 

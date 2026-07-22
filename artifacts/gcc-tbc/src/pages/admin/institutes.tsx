@@ -1,4 +1,6 @@
-import { useListInstitutes, useCreateInstitute, getListInstitutesQueryKey } from "@workspace/api-client-react";
+import {
+  useListInstitutes, useCreateInstitute, useApproveInstitute, useSuspendInstitute, useSetInstitutePremium, getListInstitutesQueryKey,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -7,9 +9,14 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Plus, Search, Building2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -32,6 +39,39 @@ export default function AdminInstitutes() {
   });
 
   const createInstitute = useCreateInstitute();
+  const approveInstitute = useApproveInstitute();
+  const suspendInstitute = useSuspendInstitute();
+  const setPremium = useSetInstitutePremium();
+
+  const handlePremiumToggle = (id: number, premium: boolean) => {
+    setPremium.mutate({ id, data: { premium } }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListInstitutesQueryKey() });
+        toast({ title: premium ? "Premium granted" : "Premium revoked" });
+      },
+      onError: () => toast({ title: "Failed to update Premium status", variant: "destructive" }),
+    });
+  };
+
+  const handleApprove = (id: number) => {
+    approveInstitute.mutate({ id }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListInstitutesQueryKey() });
+        toast({ title: "Institute approved" });
+      },
+      onError: () => toast({ title: "Failed to approve institute", variant: "destructive" }),
+    });
+  };
+
+  const handleSuspend = (id: number) => {
+    suspendInstitute.mutate({ id }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListInstitutesQueryKey() });
+        toast({ title: "Institute suspended" });
+      },
+      onError: () => toast({ title: "Failed to suspend institute", variant: "destructive" }),
+    });
+  };
 
   const form = useForm<z.infer<typeof instituteSchema>>({
     resolver: zodResolver(instituteSchema),
@@ -129,6 +169,9 @@ export default function AdminInstitutes() {
                 <TableHead>Email</TableHead>
                 <TableHead>Plan</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Account</TableHead>
+                <TableHead>Premium (Manual)</TableHead>
+                <TableHead>Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -141,6 +184,60 @@ export default function AdminInstitutes() {
                     <Badge variant={inst.isActive ? "default" : "secondary"} className="text-xs">
                       {inst.isActive ? "Active" : "Inactive"}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={inst.accountStatus === "active" ? "default" : inst.accountStatus === "suspended" ? "destructive" : "secondary"}
+                      className="capitalize text-xs"
+                    >
+                      {inst.accountStatus}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={inst.premiumGrantedByOwner}
+                        onCheckedChange={(checked) => handlePremiumToggle(inst.id, checked)}
+                        disabled={setPremium.isPending}
+                        data-testid={`switch-premium-institute-${inst.id}`}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {inst.premiumGrantedByOwner ? "Premium" : "Normal"}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      {inst.accountStatus !== "active" && (
+                        <button
+                          className="text-xs text-primary hover:underline"
+                          onClick={() => handleApprove(inst.id)}
+                          disabled={approveInstitute.isPending}
+                        >
+                          Approve
+                        </button>
+                      )}
+                      {inst.accountStatus !== "suspended" && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <button className="text-xs text-destructive hover:underline">Suspend</button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Suspend {inst.name}?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This blocks the institute admin and its students from practicing or
+                                taking exams until reactivated.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleSuspend(inst.id)}>Suspend</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

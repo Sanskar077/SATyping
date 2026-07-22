@@ -4,9 +4,10 @@
  * Hindi (Inscript), and Marathi (ISM Remington) with shortcut references.
  */
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Keyboard } from "lucide-react";
+import { Keyboard, ArrowRight } from "lucide-react";
 import { REMINGTON_MAP, PRE_I_SENTINEL } from "@/lib/ism-remington-map";
 
 // Optional human-readable hints for specific keys — annotation only, never a
@@ -119,6 +120,14 @@ export function KeyboardOverlay() {
           </TabsList>
 
           <TabsContent value="remington" className="space-y-4 pt-4">
+            <Link
+              href="/keyboard"
+              onClick={() => setOpen(false)}
+              className="flex items-center justify-between rounded-lg border bg-primary/5 hover:bg-primary/10 transition-colors p-3 text-sm"
+            >
+              <span>Open the full interactive Virtual Keyboard — search, filters, and learning mode</span>
+              <ArrowRight className="h-4 w-4 flex-shrink-0" />
+            </Link>
             <p className="text-sm text-muted-foreground">
               ISM Remington layout: physical keys map to Devanagari characters. The <strong>i-matra (ि)</strong> is
               typed by pressing <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono">f</kbd> <em>before</em> the consonant — it is the only pre-consonant key.

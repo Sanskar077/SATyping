@@ -1,12 +1,15 @@
 import { Router } from "express";
-import { eq, and, desc, SQL } from "drizzle-orm";
+import { eq, and, desc, SQL, count } from "drizzle-orm";
 import { db, testsTable, testAttemptsTable, passagesTable, resultsTable, usersTable } from "@workspace/db";
 import {
   ListTestsQueryParams, CreateTestBody, GetTestParams, UpdateTestParams,
   UpdateTestBody, DeleteTestParams, ListTestAttemptsQueryParams, CreateTestAttemptBody,
   GetTestAttemptParams, SubmitTestAttemptBody,
 } from "@workspace/api-zod";
-import { requireAuth, requireRole } from "../lib/auth";
+import { requireAuth } from "../lib/auth";
+import { requireActiveAccess } from "../lib/roles";
+import { requirePermission, PERMISSIONS } from "../lib/permissions";
+import { getOwnAccountAccess } from "../lib/account-status";
 import { randomUUID } from "crypto";
 
 const router = Router();
@@ -52,7 +55,7 @@ function formatAttempt(
 
 // ─── TESTS ───────────────────────────────────────────────────────────────────
 
-router.get("/tests", requireAuth, async (req, res): Promise<void> => {
+router.get("/tests", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const params = ListTestsQueryParams.safeParse(req.query);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -69,12 +72,12 @@ router.get("/tests", requireAuth, async (req, res): Promise<void> => {
   const where = and(...conditions);
 
   const tests = await db.select().from(testsTable).where(where).limit(limit).offset(offset);
-  const all = await db.select().from(testsTable).where(where);
+  const [{ value: total }] = await db.select({ value: count() }).from(testsTable).where(where);
 
-  res.json({ tests: tests.map(formatTest), total: all.length, page, limit });
+  res.json({ tests: tests.map(formatTest), total, page, limit });
 });
 
-router.post("/tests", requireAuth, requireRole("teacher", "institute_admin", "super_admin"), async (req, res): Promise<void> => {
+router.post("/tests", requireAuth, requireActiveAccess(getOwnAccountAccess), requirePermission(PERMISSIONS.MANAGE_TESTS), async (req, res): Promise<void> => {
   const parsed = CreateTestBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -85,7 +88,7 @@ router.post("/tests", requireAuth, requireRole("teacher", "institute_admin", "su
   res.status(201).json(formatTest(test));
 });
 
-router.get("/tests/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/tests/:id", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
 
@@ -98,7 +101,7 @@ router.get("/tests/:id", requireAuth, async (req, res): Promise<void> => {
   res.json(formatTest(test));
 });
 
-router.patch("/tests/:id", requireAuth, requireRole("teacher", "institute_admin", "super_admin"), async (req, res): Promise<void> => {
+router.patch("/tests/:id", requireAuth, requireActiveAccess(getOwnAccountAccess), requirePermission(PERMISSIONS.MANAGE_TESTS), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
 
@@ -117,7 +120,7 @@ router.patch("/tests/:id", requireAuth, requireRole("teacher", "institute_admin"
   res.json(formatTest(test));
 });
 
-router.delete("/tests/:id", requireAuth, requireRole("teacher", "institute_admin", "super_admin"), async (req, res): Promise<void> => {
+router.delete("/tests/:id", requireAuth, requireActiveAccess(getOwnAccountAccess), requirePermission(PERMISSIONS.MANAGE_TESTS), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   await db.delete(testsTable).where(eq(testsTable.id, id));
@@ -126,7 +129,7 @@ router.delete("/tests/:id", requireAuth, requireRole("teacher", "institute_admin
 
 // ─── TEST ATTEMPTS ────────────────────────────────────────────────────────────
 
-router.get("/test-attempts", requireAuth, async (req, res): Promise<void> => {
+router.get("/test-attempts", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const params = ListTestAttemptsQueryParams.safeParse(req.query);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -143,7 +146,7 @@ router.get("/test-attempts", requireAuth, async (req, res): Promise<void> => {
 
   const attempts = await db.select().from(testAttemptsTable).where(where)
     .orderBy(desc(testAttemptsTable.startedAt)).limit(limit).offset(offset);
-  const all = await db.select().from(testAttemptsTable).where(where);
+  const [{ value: total }] = await db.select({ value: count() }).from(testAttemptsTable).where(where);
 
   const withDetails = await Promise.all(attempts.map(async (a) => {
     const [test] = await db.select().from(testsTable).where(eq(testsTable.id, a.testId));
@@ -151,10 +154,10 @@ router.get("/test-attempts", requireAuth, async (req, res): Promise<void> => {
     return formatAttempt(a, test, passage);
   }));
 
-  res.json({ attempts: withDetails, total: all.length, page, limit });
+  res.json({ attempts: withDetails, total, page, limit });
 });
 
-router.post("/test-attempts", requireAuth, async (req, res): Promise<void> => {
+router.post("/test-attempts", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const parsed = CreateTestAttemptBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -195,7 +198,7 @@ router.post("/test-attempts", requireAuth, async (req, res): Promise<void> => {
   res.status(201).json(formatAttempt(attempt, test, passage));
 });
 
-router.get("/test-attempts/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/test-attempts/:id", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
 
@@ -210,7 +213,7 @@ router.get("/test-attempts/:id", requireAuth, async (req, res): Promise<void> =>
   res.json(formatAttempt(attempt, test, passage));
 });
 
-router.patch("/test-attempts/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/test-attempts/:id", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
 
@@ -223,6 +226,12 @@ router.patch("/test-attempts/:id", requireAuth, async (req, res): Promise<void> 
   const [existingAttempt] = await db.select().from(testAttemptsTable).where(eq(testAttemptsTable.id, id));
   if (!existingAttempt) {
     res.status(404).json({ error: "Attempt not found" });
+    return;
+  }
+  // Previously unchecked — any authenticated user could submit/complete another user's test
+  // attempt by id, inserting result rows against someone else's attempt.
+  if (existingAttempt.userId !== req.user!.userId && req.user!.role !== "super_admin") {
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
 

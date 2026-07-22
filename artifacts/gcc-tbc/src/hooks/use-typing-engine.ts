@@ -17,7 +17,7 @@
  */
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { toGraphemes } from "@/lib/grapheme-utils";
+import { toGraphemes, clusterMatch, VOWEL_LENGTHENING } from "@/lib/grapheme-utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -143,9 +143,13 @@ export function useTypingEngine({
 
     let correct = 0, incorrect = 0;
     for (let i = 0; i < totalTyped; i++) {
-      const t = (typedGraphemes[i]  ?? "").normalize("NFC");
-      const p = (passageGraphemes[i] ?? "").normalize("NFC");
-      if (t === p) correct++; else incorrect++;
+      const t = typedGraphemes[i]  ?? "";
+      const p = passageGraphemes[i] ?? "";
+      const isLastTyped = i === totalTyped - 1;
+      const match = clusterMatch(t, p);
+      if (match === "exact") { correct++; continue; }
+      if (match === "prefix" && isLastTyped) continue; // still composing — not a mistake (yet)
+      incorrect++;
     }
 
     const mins     = elapsedSeconds > 0 ? elapsedSeconds / 60 : 1 / 60;
@@ -174,13 +178,20 @@ export function useTypingEngine({
     onComplete?.(stats, elapsed);
   }, [isCompleted, startTime, elapsedSeconds, stats, onComplete]);
 
-  // Auto-complete when passage finished
+  // Auto-complete when passage finished. Cluster COUNT reaching the passage's length is not
+  // sufficient on its own — if the passage's LAST character is a consonant+matra sequence, the
+  // count matches as soon as the bare consonant is typed (क alone is already 1 cluster, same as
+  // target का), which would end the exam before the matra was actually typed. Require the last
+  // cluster to be an exact match too.
   useEffect(() => {
-    if (freeMode) return;
-    if (!isCompleted && passageGraphemes.length > 0 &&
-        typedGraphemes.length >= passageGraphemes.length)
-      handleComplete();
-  }, [typedGraphemes.length, passageGraphemes.length, isCompleted, handleComplete, freeMode]);
+    if (freeMode || isCompleted || passageGraphemes.length === 0) return;
+    if (typedGraphemes.length < passageGraphemes.length) return;
+    const lastIndex = passageGraphemes.length - 1;
+    const typedLast  = (typedGraphemes[lastIndex] ?? "").normalize("NFC");
+    const targetLast = (passageGraphemes[lastIndex] ?? "").normalize("NFC");
+    if (typedLast !== targetLast) return;
+    handleComplete();
+  }, [typedGraphemes, passageGraphemes, isCompleted, handleComplete, freeMode]);
 
   // Countdown auto-complete (exam mode)
   useEffect(() => {
@@ -197,7 +208,8 @@ export function useTypingEngine({
     const norm = chars.normalize("NFC");
     setStartTime((p) => p ?? Date.now());
     setTypedText((prev) => {
-      const next = prev + norm;
+      const lengthened = VOWEL_LENGTHENING[prev.slice(-1)]?.[norm];
+      const next = lengthened ? prev.slice(0, -1) + lengthened : prev + norm;
       if (freeMode) return next;
       const nextG   = toGraphemes(next);
       const passLen = toGraphemes(passageTextRef.current.normalize("NFC")).length;
@@ -232,9 +244,13 @@ export function useTypingEngine({
   const getClusterState = useCallback(
     (i: number): "correct" | "incorrect" | "cursor" | "pending" => {
       if (i < typedGraphemes.length) {
-        const t = (typedGraphemes[i]  ?? "").normalize("NFC");
-        const p = (passageGraphemes[i] ?? "").normalize("NFC");
-        return t === p ? "correct" : "incorrect";
+        const t = typedGraphemes[i]  ?? "";
+        const p = passageGraphemes[i] ?? "";
+        const isLastTyped = i === typedGraphemes.length - 1;
+        const match = clusterMatch(t, p);
+        if (match === "exact") return "correct";
+        if (match === "prefix" && isLastTyped) return "cursor"; // still composing a matra
+        return "incorrect";
       }
       return i === typedGraphemes.length ? "cursor" : "pending";
     },

@@ -1,8 +1,10 @@
 import { Router } from "express";
-import { eq, and, desc, SQL } from "drizzle-orm";
+import { eq, and, desc, SQL, count } from "drizzle-orm";
 import { db, resultsTable, usersTable, testAttemptsTable, testsTable, typingSessionsTable } from "@workspace/db";
 import { ListResultsQueryParams, GetResultParams, GetLeaderboardQueryParams } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth";
+import { requireActiveAccess } from "../lib/roles";
+import { getOwnAccountAccess } from "../lib/account-status";
 
 const router = Router();
 
@@ -24,7 +26,7 @@ async function formatResult(r: typeof resultsTable.$inferSelect) {
 }
 
 // Feature 6: Personal Best Tracker Dashboard Widget
-router.get("/results/personal-bests", requireAuth, async (req, res): Promise<void> => {
+router.get("/results/personal-bests", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const userId = req.user!.userId;
 
   const sessions = await db.select().from(typingSessionsTable)
@@ -100,7 +102,7 @@ router.get("/results/personal-bests", requireAuth, async (req, res): Promise<voi
   });
 });
 
-router.get("/results/dashboard", requireAuth, async (req, res): Promise<void> => {
+router.get("/results/dashboard", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const userId = req.user!.userId;
 
   const sessions = await db.select().from(typingSessionsTable)
@@ -150,7 +152,7 @@ router.get("/results/dashboard", requireAuth, async (req, res): Promise<void> =>
   });
 });
 
-router.get("/results/leaderboard", requireAuth, async (req, res): Promise<void> => {
+router.get("/results/leaderboard", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const params = GetLeaderboardQueryParams.safeParse(req.query);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -183,7 +185,7 @@ router.get("/results/leaderboard", requireAuth, async (req, res): Promise<void> 
   res.json(entries);
 });
 
-router.get("/results", requireAuth, async (req, res): Promise<void> => {
+router.get("/results", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const params = ListResultsQueryParams.safeParse(req.query);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -202,13 +204,13 @@ router.get("/results", requireAuth, async (req, res): Promise<void> => {
 
   const results = await db.select().from(resultsTable)
     .where(where).orderBy(desc(resultsTable.createdAt)).limit(limit).offset(offset);
-  const all = await db.select().from(resultsTable).where(where);
+  const [{ value: total }] = await db.select({ value: count() }).from(resultsTable).where(where);
 
   const formatted = await Promise.all(results.map(formatResult));
-  res.json({ results: formatted, total: all.length, page, limit });
+  res.json({ results: formatted, total, page, limit });
 });
 
-router.get("/results/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/results/:id", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
 

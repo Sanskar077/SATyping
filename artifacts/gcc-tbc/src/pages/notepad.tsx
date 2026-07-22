@@ -6,7 +6,7 @@
  * exact same useTypingEngine hook and attachTypingKeyHandlers key-resolution
  * logic that power exams/practice/drills power this page too (freeMode).
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -42,21 +42,30 @@ export default function Notepad() {
   const { typedText, stats, elapsedSeconds, setText, reset, textareaRef } = engine;
 
   // ── Undo / Redo history (character-granular) ──────────────────────────
+  // Capped at MAX_HISTORY entries so a very long free-typing session can't grow this
+  // unbounded — oldest entries are dropped once the cap is hit.
+  const MAX_HISTORY = 500;
   const historyRef   = useRef<string[]>([""]);
   const histIndexRef = useRef(0);
   const applyingHistoryRef = useRef(false);
 
   useEffect(() => {
     if (applyingHistoryRef.current) { applyingHistoryRef.current = false; return; }
-    const h = historyRef.current.slice(0, histIndexRef.current + 1);
+    let h = historyRef.current.slice(0, histIndexRef.current + 1);
     h.push(typedText);
+    if (h.length > MAX_HISTORY) {
+      h = h.slice(h.length - MAX_HISTORY);
+    }
     historyRef.current = h;
     histIndexRef.current = h.length - 1;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [typedText]);
 
   // ── Load saved text for this language on mount / language change ──────
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) so this runs synchronously after DOM mutation but
+  // BEFORE the browser paints — otherwise the first frame briefly shows empty content
+  // and then "pops" to the saved text once the effect fires.
+  useLayoutEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_PREFIX + language);
       applyingHistoryRef.current = true;
@@ -68,6 +77,24 @@ export default function Notepad() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [language]);
+
+  // ── Debounced auto-save (2s after the last keystroke) ──────────────────
+  // The manual Save button still works exactly as before; this just means a refresh
+  // mid-session doesn't lose work that was never explicitly saved.
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_PREFIX + language, typedText);
+      } catch {
+        // Silent — the manual Save button will still surface a failure toast if the user tries it.
+      }
+    }, 2000);
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [typedText, language]);
 
   const handleUndo = useCallback(() => {
     if (histIndexRef.current <= 0) return;

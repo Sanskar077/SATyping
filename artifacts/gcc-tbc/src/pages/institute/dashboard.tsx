@@ -5,20 +5,21 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Users, BookOpen, Trophy, Plus, Settings } from "lucide-react";
+import { Users, BookOpen, Trophy, Plus, Settings, Wallet } from "lucide-react";
+import { EmailVerificationBanner } from "@/components/email-verification-banner";
 
 export default function InstituteDashboard() {
   const { user } = useAuth();
   const instituteId = user?.instituteId ?? 0;
 
-  const { data: institute } = useGetInstitute(instituteId, {
+  const { data: institute, isLoading: instituteLoading } = useGetInstitute(instituteId, {
     query: { enabled: !!instituteId, queryKey: getGetInstituteQueryKey(instituteId) },
   });
-  const { data: studentsData } = useGetInstituteStudents(instituteId, {
+  const { data: studentsData, isLoading: studentsLoading } = useGetInstituteStudents(instituteId, {
     query: { enabled: !!instituteId, queryKey: getGetInstituteStudentsQueryKey(instituteId) },
   });
   const testsParams = { instituteId: instituteId || undefined };
-  const { data: testsData } = useListTests(
+  const { data: testsData, isLoading: testsLoading } = useListTests(
     testsParams,
     { query: { enabled: !!instituteId, queryKey: getListTestsQueryKey(testsParams) } }
   );
@@ -26,14 +27,22 @@ export default function InstituteDashboard() {
   const students = studentsData?.users ?? [];
   const tests = testsData?.tests ?? [];
 
+  if (instituteLoading || studentsLoading || testsLoading) {
+    return <div className="text-center py-20 text-muted-foreground">Loading institute dashboard...</div>;
+  }
+
   return (
     <div className="space-y-6" data-testid="institute-dashboard">
+      <EmailVerificationBanner emailVerified={user?.emailVerified} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{institute?.name ?? "Institute Dashboard"}</h1>
           <p className="text-muted-foreground mt-1">{institute?.address}</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/institute/commissions"><Wallet className="mr-2 h-4 w-4" />Commissions</Link>
+          </Button>
           <Button variant="outline" asChild>
             <Link href="/profile"><Settings className="mr-2 h-4 w-4" />Settings</Link>
           </Button>

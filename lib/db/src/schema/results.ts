@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, real, boolean, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, real, boolean, text, timestamp, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -20,7 +20,9 @@ export const resultsTable = pgTable("results", {
   passed: boolean("passed").notNull(),
   certificateId: integer("certificate_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  userIdIdx: index("results_user_id_idx").on(table.userId),
+}));
 
 export const insertResultSchema = createInsertSchema(resultsTable).omit({ id: true, createdAt: true });
 export type InsertResult = z.infer<typeof insertResultSchema>;

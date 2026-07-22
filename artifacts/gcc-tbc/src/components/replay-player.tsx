@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Play, Pause, RotateCcw, FastForward } from "lucide-react";
 import type { KeystrokeEntry } from "@/components/keystroke-heatmap";
-import { toGraphemes } from "@/lib/grapheme-utils";
+import { toGraphemes, clusterMatch } from "@/lib/grapheme-utils";
 import { cn } from "@/lib/utils";
 
 const SPEEDS = [0.5, 1, 1.5, 2, 3] as const;
@@ -126,9 +126,17 @@ export function ReplayPlayer({ keystrokes, passageText, className = "" }: Replay
           const typed = typedGraphemes[i];
           let cls = "text-foreground/40";
           if (i < typedGraphemes.length) {
-            cls = typed?.normalize("NFC") === cluster.normalize("NFC")
-              ? "text-green-600 dark:text-green-400"
-              : "text-white bg-red-500 dark:bg-red-600 rounded-sm";
+            const isLastTyped = i === typedGraphemes.length - 1;
+            const match = clusterMatch(typed ?? "", cluster);
+            if (match === "exact") {
+              cls = "text-green-600 dark:text-green-400";
+            } else if (match === "prefix" && isLastTyped) {
+              // Same in-progress Devanagari cluster case as the live engine — a consonant typed
+              // just before its matra shouldn't flash red for one keystroke during replay either.
+              cls = "bg-blue-100 dark:bg-blue-900 border-b-2 border-blue-600 dark:border-blue-400";
+            } else {
+              cls = "text-white bg-red-500 dark:bg-red-600 rounded-sm";
+            }
           } else if (i === typedGraphemes.length) {
             cls = "bg-blue-100 dark:bg-blue-900 border-b-2 border-blue-600 dark:border-blue-400";
           }

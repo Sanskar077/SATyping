@@ -75,6 +75,10 @@ export function NotepadTypingArea({
       />
       <div
         id="notepad-text-display"
+        // Perf note (Phase 7 verification): this renders `typedText` as a single string into one
+        // DOM text node — there is no per-character span/element, so React's reconciliation here
+        // is a single text-node update regardless of length. No virtualization/memoization added,
+        // since there's no per-character DOM growth to speculatively optimize against.
         className={`relative z-0 w-full h-full min-h-[16rem] p-4 whitespace-pre-wrap break-words text-foreground ${fontSize}`}
         style={{
           fontFamily: isDevanagari

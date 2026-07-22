@@ -81,6 +81,10 @@ export default function CurriculumPage() {
             <Skeleton key={i} className="h-40 rounded-xl" />
           ))}
         </div>
+      ) : data?.categories.length === 0 ? (
+        <div className="text-center py-16">
+          <p className="text-muted-foreground">No curriculum content is available for this language yet.</p>
+        </div>
       ) : (
         data?.categories.map(category => {
           const done  = category.lessons.filter(l => l.isCompleted).length;

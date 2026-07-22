@@ -69,6 +69,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /auth/register/student:
+    post:
+      operationId: registerStudent
+      tags: [auth]
+      summary: Register a new student, either joining an institute or independently
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudentRegisterInput"
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/register/institute:
+    post:
+      operationId: registerInstitute
+      tags: [auth]
+      summary: Register a new institute together with its first institute admin, in one transaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstituteRegisterInput"
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /auth/login:
     post:
       operationId: login
@@ -102,6 +152,88 @@ paths:
       responses:
         "204":
           description: Logged out
+
+  /auth/verify-email:
+    post:
+      operationId: verifyEmail
+      tags: [auth]
+      summary: Verify an email address using the token from the verification email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyEmailInput"
+      responses:
+        "200":
+          description: Verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/resend-verification:
+    post:
+      operationId: resendVerification
+      tags: [auth]
+      summary: Resend the email verification link to the current user
+      responses:
+        "200":
+          description: Sent (or already verified)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /auth/forgot-password:
+    post:
+      operationId: forgotPassword
+      tags: [auth]
+      summary: Request a password reset email — always returns 200 regardless of whether the email exists, to avoid leaking registered emails
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordInput"
+      responses:
+        "200":
+          description: Always returns this, whether or not the email exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /auth/reset-password:
+    post:
+      operationId: resetPassword
+      tags: [auth]
+      summary: Reset password using the token from the reset email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordInput"
+      responses:
+        "200":
+          description: Password reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /auth/refresh:
     post:
@@ -397,6 +529,90 @@ paths:
               schema:
                 $ref: "#/components/schemas/UserListResponse"
 
+    post:
+      operationId: addInstituteStudent
+      tags: [institutes]
+      summary: Institute admin directly creates a student account under their institute
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddInstituteStudentInput"
+      responses:
+        "201":
+          description: Created student
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /institutes/{id}/students/{userId}:
+    delete:
+      operationId: removeInstituteStudent
+      tags: [institutes]
+      summary: Remove a student from an institute — demotes to independent, never deletes the account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed (demoted to independent)
+
+  /users/{id}/premium:
+    patch:
+      operationId: setUserPremium
+      tags: [users]
+      summary: Owner manually grants or revokes Premium access for a user — bypasses payment entirely
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetPremiumInput"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/me/leave-institute:
+    post:
+      operationId: leaveInstitute
+      tags: [users]
+      summary: A student leaves their institute — demotes to independent, keeps account/history/results
+      responses:
+        "204":
+          description: Left institute
+
   /institutes/{id}/stats:
     get:
       operationId: getInstituteStats
@@ -417,6 +633,69 @@ paths:
                 $ref: "#/components/schemas/InstituteStats"
 
   # ─── BATCHES ─────────────────────────────────────────────────────────────────
+  /institutes/{id}/approve:
+    post:
+      operationId: approveInstitute
+      tags: [institutes]
+      summary: Owner approves an institute's account (inactive → active), e.g. after manual/offline payment verification
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Institute"
+
+  /institutes/{id}/suspend:
+    post:
+      operationId: suspendInstitute
+      tags: [institutes]
+      summary: Owner suspends an institute's account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Suspended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Institute"
+
+  /institutes/{id}/premium:
+    patch:
+      operationId: setInstitutePremium
+      tags: [institutes]
+      summary: Owner manually grants or revokes Premium access for an institute (covers its whole roster) — bypasses payment entirely
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetPremiumInput"
+      responses:
+        "200":
+          description: Updated institute
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Institute"
+
   /batches:
     get:
       operationId: listBatches
@@ -1255,7 +1534,7 @@ paths:
     post:
       operationId: upgradeSubscription
       tags: [subscriptions]
-      summary: Upgrade subscription plan
+      summary: Owner grants a plan directly to a user (free/lifetime access) — bypasses payment entirely, so this is owner-only
       requestBody:
         required: true
         content:
@@ -1388,6 +1667,601 @@ paths:
               schema:
                 $ref: "#/components/schemas/BulkImportResult"
 
+  # ─── PLANS ────────────────────────────────────────────────────────────────────
+  /plans:
+    get:
+      operationId: listPlans
+      tags: [plans]
+      summary: List active plans (public)
+      parameters:
+        - name: forInstitute
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Plans list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommercePlanListResponse"
+
+    post:
+      operationId: createPlan
+      tags: [plans]
+      summary: Create a plan (owner only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommercePlanInput"
+      responses:
+        "201":
+          description: Created plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommercePlan"
+
+  /plans/{id}:
+    get:
+      operationId: getPlan
+      tags: [plans]
+      summary: Get plan by ID (public)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommercePlan"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      operationId: updatePlan
+      tags: [plans]
+      summary: Update plan (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommercePlanUpdate"
+      responses:
+        "200":
+          description: Updated plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommercePlan"
+
+    delete:
+      operationId: deletePlan
+      tags: [plans]
+      summary: Delete plan (owner only; soft-deletes if it has active subscriptions)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted or soft-deleted
+
+  # ─── OFFERS ───────────────────────────────────────────────────────────────────
+  /offers/validate:
+    get:
+      operationId: validateOffer
+      tags: [offers]
+      summary: Validate an offer code against a plan and compute the discount
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: planId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Computed discount
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OfferValidation"
+        "404":
+          description: Offer not found, expired, or exhausted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /offers:
+    get:
+      operationId: listOffers
+      tags: [offers]
+      summary: List all offers (owner only)
+      responses:
+        "200":
+          description: Offers list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OfferListResponse"
+
+    post:
+      operationId: createOffer
+      tags: [offers]
+      summary: Create an offer (owner only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfferInput"
+      responses:
+        "201":
+          description: Created offer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offer"
+
+  /offers/{id}:
+    patch:
+      operationId: updateOffer
+      tags: [offers]
+      summary: Update an offer (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfferUpdate"
+      responses:
+        "200":
+          description: Updated offer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offer"
+
+    delete:
+      operationId: deleteOffer
+      tags: [offers]
+      summary: Delete an offer (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── COMMISSIONS ──────────────────────────────────────────────────────────────
+  /commissions/my:
+    get:
+      operationId: listMyCommissions
+      tags: [commissions]
+      summary: List commissions for the current institute admin's own institute
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Commissions list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommissionListResponse"
+
+  /commissions:
+    get:
+      operationId: listCommissions
+      tags: [commissions]
+      summary: List all commissions across all institutes (owner only)
+      parameters:
+        - name: instituteId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Commissions list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommissionListResponse"
+
+  /commissions/{id}:
+    patch:
+      operationId: updateCommissionStatus
+      tags: [commissions]
+      summary: Transition a commission's status (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommissionStatusUpdate"
+      responses:
+        "200":
+          description: Updated commission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Commission"
+
+  # ─── PAYMENTS ─────────────────────────────────────────────────────────────────
+  /payments/checkout:
+    post:
+      operationId: createCheckout
+      tags: [payments]
+      summary: Create a Razorpay order for a plan purchase (server computes the real amount)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckoutInput"
+      responses:
+        "201":
+          description: Checkout order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /payments/webhook:
+    post:
+      operationId: paymentsWebhook
+      tags: [payments]
+      summary: Razorpay webhook receiver (signature-verified, not user-authenticated)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RazorpayWebhookPayload"
+      responses:
+        "200":
+          description: Acknowledged
+        "400":
+          description: Invalid signature or payload
+
+  /payments/my:
+    get:
+      operationId: listMyPayments
+      tags: [payments]
+      summary: List the current user's payment history
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Payments list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentListResponse"
+
+  /payments:
+    get:
+      operationId: listPayments
+      tags: [payments]
+      summary: List all payments (owner only), filterable
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Payments list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentListResponse"
+
+  /payments/{id}/refund:
+    post:
+      operationId: refundPayment
+      tags: [payments]
+      summary: Refund a payment (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Refunded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+        "400":
+          description: Cannot refund this payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── INVOICES ─────────────────────────────────────────────────────────────────
+  /invoices/my:
+    get:
+      operationId: listMyInvoices
+      tags: [invoices]
+      summary: List the current user's invoices
+      responses:
+        "200":
+          description: Invoices list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceListResponse"
+
+  /invoices/{id}:
+    get:
+      operationId: getInvoice
+      tags: [invoices]
+      summary: Get a single invoice (owner of the invoice, or the platform owner)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+  /notifications/my:
+    get:
+      operationId: listMyNotifications
+      tags: [notifications]
+      summary: List the current user's notifications
+      parameters:
+        - name: unreadOnly
+          in: query
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Notifications list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationListResponse"
+
+  /notifications/unread-count:
+    get:
+      operationId: getUnreadNotificationCount
+      tags: [notifications]
+      summary: Count of the current user's unread notifications
+      responses:
+        "200":
+          description: Count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnreadCountResponse"
+
+  /notifications/{id}/read:
+    post:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark a single notification as read (must belong to the caller)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated notification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
+  /notifications/read-all:
+    post:
+      operationId: markAllNotificationsRead
+      tags: [notifications]
+      summary: Mark all of the caller's notifications as read
+      responses:
+        "204":
+          description: Done
+
+  # ─── ACTIVITY LOGS (owner only) ───────────────────────────────────────────────
+  /audit-logs:
+    get:
+      operationId: listAuditLogs
+      tags: [activity]
+      summary: List Owner mutation audit logs (owner only)
+      parameters:
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: targetType
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Audit log list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogListResponse"
+
+  /login-logs:
+    get:
+      operationId: listLoginLogs
+      tags: [activity]
+      summary: List login attempts, success and failure (owner only)
+      parameters:
+        - name: email
+          in: query
+          schema:
+            type: string
+        - name: success
+          in: query
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Login log list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginLogListResponse"
+
+  # ─── ANALYTICS (owner only) ───────────────────────────────────────────────────
+  /analytics/overview:
+    get:
+      operationId: getAnalyticsOverview
+      tags: [analytics]
+      summary: Platform-wide analytics for the Owner dashboard
+      responses:
+        "200":
+          description: Analytics overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsOverview"
+
 components:
   schemas:
     HealthStatus:
@@ -1492,6 +2366,16 @@ components:
         subscriptionPlan:
           type: string
           enum: [free, pro_student, institute]
+        accountStatus:
+          type: string
+          enum: [inactive, active, suspended]
+        premiumGrantedByOwner:
+          type: boolean
+        hasAccess:
+          type: boolean
+          description: Computed server-side — own accountStatus active, OR (if institute member) institute accountStatus active, OR role is super_admin.
+        emailVerified:
+          type: boolean
         instituteId:
           type: ["integer", "null"]
         instituteName:
@@ -1533,7 +2417,7 @@ components:
     # ─── INSTITUTE SCHEMAS ────────────────────────────────────────────────────
     Institute:
       type: object
-      required: [id, name, isActive, subscriptionPlan, createdAt]
+      required: [id, name, isActive, subscriptionPlan, accountStatus, createdAt]
       properties:
         id:
           type: integer
@@ -1552,6 +2436,13 @@ components:
         subscriptionPlan:
           type: string
           enum: [free, institute]
+        accountStatus:
+          type: string
+          enum: [inactive, active, suspended]
+        premiumGrantedByOwner:
+          type: boolean
+        referralCode:
+          type: ["string", "null"]
         studentCount:
           type: integer
         createdAt:
@@ -2310,11 +3201,18 @@ components:
 
     SubscriptionUpgradeInput:
       type: object
-      required: [plan]
+      required: [userId, plan]
       properties:
+        userId:
+          type: integer
+          description: Owner-only grant target — this endpoint no longer upgrades the caller's own plan.
         plan:
           type: string
           enum: [pro_student, institute]
+        durationDays:
+          type: integer
+          minimum: 1
+          description: Defaults to 30 if omitted; use a large value for a "lifetime" grant.
 
     Plan:
       type: object
@@ -2556,3 +3454,605 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Passage"
+
+    # ─── PLAN SCHEMAS ─────────────────────────────────────────────────────────
+    CommercePlan:
+      type: object
+      required: [id, name, priceInPaise, currency, durationDays, forInstitute, features, isActive, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        priceInPaise:
+          type: integer
+        currency:
+          type: string
+        durationDays:
+          type: integer
+        forInstitute:
+          type: boolean
+        features:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    CommercePlanInput:
+      type: object
+      required: [name, priceInPaise, durationDays]
+      properties:
+        name:
+          type: string
+          minLength: 2
+        description:
+          type: string
+        priceInPaise:
+          type: integer
+          minimum: 0
+        currency:
+          type: string
+        durationDays:
+          type: integer
+          minimum: 1
+        forInstitute:
+          type: boolean
+        features:
+          type: array
+          items:
+            type: string
+
+    CommercePlanUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+        description:
+          type: ["string", "null"]
+        priceInPaise:
+          type: integer
+          minimum: 0
+        durationDays:
+          type: integer
+          minimum: 1
+        features:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+
+    CommercePlanListResponse:
+      type: object
+      required: [plans]
+      properties:
+        plans:
+          type: array
+          items:
+            $ref: "#/components/schemas/CommercePlan"
+
+    # ─── OFFER SCHEMAS ────────────────────────────────────────────────────────
+    Offer:
+      type: object
+      required: [id, code, discountType, discountValue, redemptionCount, isActive, createdAt]
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        description:
+          type: ["string", "null"]
+        discountType:
+          type: string
+          enum: [percent, flat]
+        discountValue:
+          type: number
+        planId:
+          type: ["integer", "null"]
+        maxRedemptions:
+          type: ["integer", "null"]
+        redemptionCount:
+          type: integer
+        expiresAt:
+          type: ["string", "null"]
+          format: date-time
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    OfferInput:
+      type: object
+      required: [code, discountType, discountValue]
+      properties:
+        code:
+          type: string
+          minLength: 3
+        description:
+          type: string
+        discountType:
+          type: string
+          enum: [percent, flat]
+        discountValue:
+          type: number
+          minimum: 0
+        planId:
+          type: integer
+        maxRedemptions:
+          type: integer
+          minimum: 1
+        expiresAt:
+          type: string
+          format: date-time
+
+    OfferUpdate:
+      type: object
+      properties:
+        description:
+          type: ["string", "null"]
+        discountType:
+          type: string
+          enum: [percent, flat]
+        discountValue:
+          type: number
+          minimum: 0
+        maxRedemptions:
+          type: ["integer", "null"]
+        expiresAt:
+          type: ["string", "null"]
+          format: date-time
+        isActive:
+          type: boolean
+
+    OfferListResponse:
+      type: object
+      required: [offers]
+      properties:
+        offers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Offer"
+
+    OfferValidation:
+      type: object
+      required: [code, discountType, discountValue, finalAmountInPaise]
+      properties:
+        code:
+          type: string
+        discountType:
+          type: string
+          enum: [percent, flat]
+        discountValue:
+          type: number
+        finalAmountInPaise:
+          type: integer
+
+    # ─── COMMISSION SCHEMAS ───────────────────────────────────────────────────
+    Commission:
+      type: object
+      required: [id, instituteId, paymentId, studentUserId, amountInPaise, commissionType, commissionRate, status, createdAt]
+      properties:
+        id:
+          type: integer
+        instituteId:
+          type: integer
+        paymentId:
+          type: integer
+        studentUserId:
+          type: integer
+        amountInPaise:
+          type: integer
+        commissionType:
+          type: string
+          enum: [percent, flat]
+        commissionRate:
+          type: number
+        status:
+          type: string
+          enum: [pending, approved, paid]
+        paidAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    CommissionStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [pending, approved, paid]
+
+    CommissionListResponse:
+      type: object
+      required: [commissions, total, page, limit]
+      properties:
+        commissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Commission"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    # ─── HIERARCHY-AWARE REGISTRATION SCHEMAS ────────────────────────────────
+    StudentRegisterInput:
+      type: object
+      required: [email, password, name, membershipMode]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+        name:
+          type: string
+          minLength: 2
+        phone:
+          type: string
+        membershipMode:
+          type: string
+          enum: [join, independent]
+          description: >
+            "join" sets both instituteId and referredByInstituteId (must resolve to a real
+            institute via instituteId or referralCode, or the request is rejected).
+            "independent" leaves instituteId null; an optional referralCode only sets
+            referredByInstituteId for commission attribution, and is silently ignored if invalid.
+        instituteId:
+          type: integer
+          description: Selected institute id, used when membershipMode is "join".
+        referralCode:
+          type: string
+          description: >
+            Institute referral code. Required to resolve "join" if instituteId isn't given;
+            optional commission-only attribution when membershipMode is "independent".
+
+    InstituteRegisterInput:
+      type: object
+      required: [instituteName, adminName, adminEmail, adminPassword]
+      properties:
+        instituteName:
+          type: string
+          minLength: 2
+        address:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        adminName:
+          type: string
+          minLength: 2
+        adminEmail:
+          type: string
+          format: email
+        adminPassword:
+          type: string
+          minLength: 6
+
+    AddInstituteStudentInput:
+      type: object
+      required: [email, password, name]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+        name:
+          type: string
+          minLength: 2
+        phone:
+          type: string
+
+    # ─── PAYMENT SCHEMAS ──────────────────────────────────────────────────────
+    RazorpayWebhookPayload:
+      type: object
+      description: Gateway-defined shape — validated by HMAC signature, not by strict schema.
+
+    CheckoutInput:
+      type: object
+      required: [planId]
+      properties:
+        planId:
+          type: integer
+        offerCode:
+          type: string
+
+    CheckoutResponse:
+      type: object
+      required: [paymentId, gatewayOrderId, amount, currency, razorpayKeyId]
+      properties:
+        paymentId:
+          type: integer
+        gatewayOrderId:
+          type: string
+        amount:
+          type: integer
+        currency:
+          type: string
+        razorpayKeyId:
+          type: string
+
+    Payment:
+      type: object
+      required: [id, payerType, planId, amountInPaise, currency, status, gateway, createdAt]
+      properties:
+        id:
+          type: integer
+        payerType:
+          type: string
+          enum: [student, institute]
+        planId:
+          type: integer
+        offerId:
+          type: ["integer", "null"]
+        amountInPaise:
+          type: integer
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [pending, success, failed, refunded]
+        gateway:
+          type: string
+        gatewayOrderId:
+          type: ["string", "null"]
+        gatewayPaymentId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    PaymentListResponse:
+      type: object
+      required: [payments, total, page, limit]
+      properties:
+        payments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Payment"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    # ─── INVOICE SCHEMAS ──────────────────────────────────────────────────────
+    Invoice:
+      type: object
+      required: [id, paymentId, invoiceNumber, amountInPaise, currency, issuedAt]
+      properties:
+        id:
+          type: integer
+        paymentId:
+          type: integer
+        invoiceNumber:
+          type: string
+        amountInPaise:
+          type: integer
+        currency:
+          type: string
+        issuedAt:
+          type: string
+          format: date-time
+
+    InvoiceListResponse:
+      type: object
+      required: [invoices]
+      properties:
+        invoices:
+          type: array
+          items:
+            $ref: "#/components/schemas/Invoice"
+
+    # ─── NOTIFICATION SCHEMAS ─────────────────────────────────────────────────
+    Notification:
+      type: object
+      required: [id, type, title, message, isRead, createdAt]
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [payment_success, commission_credited, commission_paid, institute_approved, institute_suspended]
+        title:
+          type: string
+        message:
+          type: string
+        isRead:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    NotificationListResponse:
+      type: object
+      required: [notifications, total, page, limit]
+      properties:
+        notifications:
+          type: array
+          items:
+            $ref: "#/components/schemas/Notification"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    UnreadCountResponse:
+      type: object
+      required: [count]
+      properties:
+        count:
+          type: integer
+
+    # ─── ACTIVITY LOG SCHEMAS ─────────────────────────────────────────────────
+    AuditLogEntry:
+      type: object
+      required: [id, userId, action, targetType, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        action:
+          type: string
+        targetType:
+          type: string
+        targetId:
+          type: ["integer", "null"]
+        metadata:
+          type: ["object", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    AuditLogListResponse:
+      type: object
+      required: [logs, total, page, limit]
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLogEntry"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    LoginLogEntry:
+      type: object
+      required: [id, email, success, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: ["integer", "null"]
+        email:
+          type: string
+        success:
+          type: boolean
+        ipAddress:
+          type: ["string", "null"]
+        userAgent:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    LoginLogListResponse:
+      type: object
+      required: [logs, total, page, limit]
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/LoginLogEntry"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    # ─── ANALYTICS SCHEMAS ────────────────────────────────────────────────────
+    RevenuePoint:
+      type: object
+      required: [month, revenueInPaise]
+      properties:
+        month:
+          type: string
+        revenueInPaise:
+          type: integer
+
+    AnalyticsOverview:
+      type: object
+      required: [totalRevenueInPaise, totalStudents, independentStudents, totalInstitutes, activeInstitutes, inactiveAccounts, revenueByMonth, planDistribution]
+      properties:
+        totalRevenueInPaise:
+          type: integer
+        totalStudents:
+          type: integer
+        independentStudents:
+          type: integer
+        totalInstitutes:
+          type: integer
+        activeInstitutes:
+          type: integer
+        inactiveAccounts:
+          type: integer
+        revenueByMonth:
+          type: array
+          items:
+            $ref: "#/components/schemas/RevenuePoint"
+        planDistribution:
+          type: array
+          items:
+            type: object
+            required: [plan, count]
+            properties:
+              plan:
+                type: string
+              count:
+                type: integer
+
+    SetPremiumInput:
+      type: object
+      required: [premium]
+      properties:
+        premium:
+          type: boolean
+          description: true grants full access immediately, ignoring payment/subscription entirely; false revokes it.
+
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    VerifyEmailInput:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+
+    ForgotPasswordInput:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    ResetPasswordInput:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+        newPassword:
+          type: string
+          minLength: 6

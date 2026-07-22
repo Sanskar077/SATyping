@@ -40,6 +40,13 @@ export default defineConfig({
     `${s}/refresh_tokens.ts`,
     `${s}/lessons.ts`,
     `${s}/lesson_completions.ts`,
+    `${s}/plans.ts`,
+    `${s}/offers.ts`,
+    `${s}/payments.ts`,
+    `${s}/invoices.ts`,
+    `${s}/commissions.ts`,
+    `${s}/audit_logs.ts`,
+    `${s}/notifications.ts`,
   ],
   dialect: "postgresql",
   dbCredentials: {

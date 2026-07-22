@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import {
   Activity, User, BookOpen, FileText,
   LogOut, LayoutDashboard, Settings,
-  Building2, Shield, Menu, X, GraduationCap, History, Timer, Upload, NotebookPen,
+  Building2, Shield, Menu, X, GraduationCap, History, Timer, Upload, NotebookPen, Receipt, Keyboard,
 } from "lucide-react";
 import { useLogout } from "@workspace/api-client-react";
 import { useState } from "react";
+import { NotificationBell } from "@/components/notification-bell";
 
 interface NavItem {
   href: string;
@@ -22,9 +23,11 @@ function buildNavItems(role: string): NavItem[] {
     { href: "/practice/drills", label: "Drills",    icon: Timer },       // Feature 3
     { href: "/notepad",        label: "Notepad",    icon: NotebookPen },
     { href: "/curriculum",     label: "Curriculum", icon: GraduationCap }, // Feature 5
+    { href: "/keyboard",       label: "Keyboard",   icon: Keyboard },
     { href: "/exams",          label: "Exams",      icon: FileText },
     { href: "/results",        label: "Results",    icon: BookOpen },
     { href: "/sessions",       label: "Sessions",   icon: History },     // Feature 8
+    { href: "/billing",        label: "Billing",    icon: Receipt },
   ];
 
   if (role === "teacher" || role === "institute_admin" || role === "super_admin") {
@@ -73,11 +76,14 @@ function SidebarContent({ onClose }: SidebarProps) {
       <div className="h-16 flex items-center px-5 border-b border-border">
         <Activity className="h-5 w-5 text-primary mr-2 flex-shrink-0" />
         <span className="font-bold text-base tracking-tight">GCC-TBC Pro</span>
-        {onClose && (
-          <button className="ml-auto text-muted-foreground hover:text-foreground" onClick={onClose}>
-            <X className="h-5 w-5" />
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-1">
+          <NotificationBell />
+          {onClose && (
+            <button className="text-muted-foreground hover:text-foreground" onClick={onClose}>
+              <X className="h-5 w-5" />
+            </button>
+          )}
+        </div>
       </div>
 
       <nav className="flex-1 overflow-y-auto py-5 px-3 space-y-0.5">
@@ -160,12 +166,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <Activity className="h-5 w-5 text-primary" />
             <span className="font-bold text-sm tracking-tight">GCC-TBC Pro</span>
           </div>
-          <button
-            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
-            onClick={() => setMobileOpen(true)}
-          >
-            <Menu className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <NotificationBell />
+            <button
+              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
+              onClick={() => setMobileOpen(true)}
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+          </div>
         </header>
 
         <div className="flex-1 overflow-x-hidden overflow-y-auto p-5 md:p-8 min-w-0">

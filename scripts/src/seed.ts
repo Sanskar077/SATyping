@@ -1,4 +1,12 @@
-import { db, usersTable, institutesTable, batchesTable, passagesTable, subscriptionsTable } from "@workspace/db";
+import { config } from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// pnpm runs this script with CWD = scripts/, so dotenv's default `.env` lookup finds nothing.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+config({ path: path.resolve(__dirname, "..", "..", ".env") });
+
+import { db, usersTable, institutesTable, batchesTable, passagesTable, subscriptionsTable, plansTable } from "@workspace/db";
 import bcrypt from "bcryptjs";
 
 async function seed() {
@@ -11,6 +19,7 @@ async function seed() {
     name: "Super Admin",
     role: "super_admin",
     subscriptionPlan: "institute",
+    accountStatus: "active",
     isActive: true,
   }).onConflictDoNothing().returning();
 
@@ -24,13 +33,16 @@ async function seed() {
     console.log("Created super admin: admin@gcctbc.com / Admin@1234");
   }
 
-  // Create a demo institute
+  // Create a demo institute — Premium-granted (not a real payment) so the seeded teacher/student
+  // aren't locked out under the no-trial access model (they inherit access from the institute).
   const [institute] = await db.insert(institutesTable).values({
     name: "GCC Typing Academy",
     address: "Mumbai, Maharashtra",
     phone: "+91-9876543210",
     email: "info@gcctyping.com",
     subscriptionPlan: "institute",
+    accountStatus: "active",
+    premiumGrantedByOwner: true,
   }).onConflictDoNothing().returning();
 
   let instituteId = institute?.id;
@@ -90,6 +102,48 @@ async function seed() {
       description: "Morning batch for 30 WPM students",
     }).onConflictDoNothing();
     console.log("Created batch: Batch A - Morning");
+  }
+
+  // Sample plans — /plans is empty until at least one exists; these give a fresh install
+  // something to show immediately. Edit/replace freely via /admin/plans once you're set up.
+  const plans = [
+    {
+      name: "Student Monthly",
+      description: "Full access for one month — practice, exams, curriculum, certificates.",
+      priceInPaise: 19900, // ₹199
+      currency: "INR",
+      durationDays: 30,
+      forInstitute: false,
+      features: ["Unlimited practice sessions", "Full exam simulator", "English + Marathi + Hindi", "Certificates"],
+    },
+    {
+      name: "Student Quarterly",
+      description: "Best value for exam preparation — 3 months of full access.",
+      priceInPaise: 49900, // ₹499
+      currency: "INR",
+      durationDays: 90,
+      forInstitute: false,
+      features: ["Everything in Monthly", "Priority support", "Save 16% vs monthly"],
+    },
+    {
+      name: "Institute Annual",
+      description: "Full-roster access for an institute — covers every enrolled student for a year.",
+      priceInPaise: 499900, // ₹4,999
+      currency: "INR",
+      durationDays: 365,
+      forInstitute: true,
+      features: ["Unlimited students", "Batch management", "Institute analytics", "Referral commissions"],
+    },
+  ];
+
+  const [existingPlan] = await db.select().from(plansTable);
+  if (existingPlan) {
+    console.log("Plans already seeded, skipping.");
+  } else {
+    for (const p of plans) {
+      await db.insert(plansTable).values(p);
+    }
+    console.log(`Seeded ${plans.length} plans`);
   }
 
   // English passages

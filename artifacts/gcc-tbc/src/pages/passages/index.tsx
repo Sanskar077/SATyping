@@ -48,9 +48,9 @@ export default function Passages() {
   };
 
   const diffColors: Record<string, string> = {
-    easy: "bg-green-100 text-green-700",
-    medium: "bg-yellow-100 text-yellow-700",
-    hard: "bg-red-100 text-red-700",
+    easy: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    medium: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+    hard: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
   };
 
   return (
@@ -113,10 +113,10 @@ export default function Passages() {
                     <h3 className="font-semibold truncate">{passage.title}</h3>
                     <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{passage.content}</p>
                     <div className="flex gap-2 mt-2 flex-wrap">
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${langColors[passage.language] ?? "bg-gray-100"}`}>
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${langColors[passage.language] ?? "bg-muted text-muted-foreground"}`}>
                         {passage.language}
                       </span>
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${diffColors[passage.difficulty] ?? "bg-gray-100"}`}>
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${diffColors[passage.difficulty] ?? "bg-muted text-muted-foreground"}`}>
                         {passage.difficulty}
                       </span>
                       <Badge variant="outline" className="text-xs">{passage.speedCategory} WPM</Badge>

@@ -1,11 +1,13 @@
 import { Router } from "express";
-import { eq, and, desc, SQL, avg, max, sum, sql } from "drizzle-orm";
+import { eq, and, desc, SQL, avg, max, sum, sql, count } from "drizzle-orm";
 import { db, typingSessionsTable, passagesTable } from "@workspace/db";
 import {
   ListTypingSessionsQueryParams, CreateTypingSessionBody,
   GetTypingSessionParams, UpdateTypingSessionParams, UpdateTypingSessionBody, GetTypingStatsQueryParams,
 } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth";
+import { requireActiveAccess } from "../lib/roles";
+import { getOwnAccountAccess } from "../lib/account-status";
 
 const router = Router();
 
@@ -34,7 +36,7 @@ function formatSession(s: typeof typingSessionsTable.$inferSelect, passage?: typ
   };
 }
 
-router.get("/typing-sessions/stats", requireAuth, async (req, res): Promise<void> => {
+router.get("/typing-sessions/stats", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const params = GetTypingStatsQueryParams.safeParse(req.query);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -73,7 +75,7 @@ router.get("/typing-sessions/stats", requireAuth, async (req, res): Promise<void
   res.json({ totalSessions, avgWpm, avgAccuracy, bestWpm, totalPracticeMinutes: totalMinutes, byLanguage, wpmTrend });
 });
 
-router.get("/typing-sessions", requireAuth, async (req, res): Promise<void> => {
+router.get("/typing-sessions", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const params = ListTypingSessionsQueryParams.safeParse(req.query);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -90,17 +92,17 @@ router.get("/typing-sessions", requireAuth, async (req, res): Promise<void> => {
 
   const sessions = await db.select().from(typingSessionsTable).where(where)
     .orderBy(desc(typingSessionsTable.createdAt)).limit(limit).offset(offset);
-  const all = await db.select().from(typingSessionsTable).where(where);
+  const [{ value: total }] = await db.select({ value: count() }).from(typingSessionsTable).where(where);
 
   const withPassages = await Promise.all(sessions.map(async (s) => {
     const [passage] = await db.select().from(passagesTable).where(eq(passagesTable.id, s.passageId));
     return formatSession(s, passage);
   }));
 
-  res.json({ sessions: withPassages, total: all.length, page, limit });
+  res.json({ sessions: withPassages, total, page, limit });
 });
 
-router.post("/typing-sessions", requireAuth, async (req, res): Promise<void> => {
+router.post("/typing-sessions", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const parsed = CreateTypingSessionBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -123,7 +125,7 @@ router.post("/typing-sessions", requireAuth, async (req, res): Promise<void> => 
   res.status(201).json(formatSession(session, passage));
 });
 
-router.get("/typing-sessions/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/typing-sessions/:id", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
 
@@ -137,13 +139,25 @@ router.get("/typing-sessions/:id", requireAuth, async (req, res): Promise<void> 
   res.json(formatSession(session, passage));
 });
 
-router.patch("/typing-sessions/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/typing-sessions/:id", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
 
   const parsed = UpdateTypingSessionBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const [existing] = await db.select().from(typingSessionsTable).where(eq(typingSessionsTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+  // A session can only be edited by the student who owns it, or the owner account — previously
+  // this had no ownership check at all, letting any authenticated user tamper with any session.
+  if (existing.userId !== req.user!.userId && req.user!.role !== "super_admin") {
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
 

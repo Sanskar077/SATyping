@@ -18,6 +18,10 @@ export interface TokenPayload {
   userId: number;
   email: string;
   role: string;
+  // Institute the user is a MEMBER of (null for owner/independent students). Used by route handlers
+  // to scope "my institute" queries. Routes that rely on this for authorization decisions (not just
+  // convenience/display) should still verify against the DB, since it's only refreshed on login.
+  instituteId?: number | null;
 }
 
 export function generateAccessToken(payload: TokenPayload): string {

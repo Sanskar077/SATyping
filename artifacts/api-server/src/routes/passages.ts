@@ -1,13 +1,28 @@
 import { Router } from "express";
-import { eq, and, ilike, SQL, sql } from "drizzle-orm";
+import { eq, and, ilike, SQL, sql, count } from "drizzle-orm";
 import { db, passagesTable } from "@workspace/db";
 import {
   ListPassagesQueryParams, CreatePassageBody, GetPassageParams,
   UpdatePassageParams, UpdatePassageBody, DeletePassageParams, GetRandomPassageQueryParams,
 } from "@workspace/api-zod";
-import { requireAuth, requireRole } from "../lib/auth";
+import { requireAuth } from "../lib/auth";
+import { requireActiveAccess } from "../lib/roles";
+import { requirePermission, PERMISSIONS } from "../lib/permissions";
+import { getOwnAccountAccess } from "../lib/account-status";
+import { z } from "zod";
 
 const router = Router();
+
+const bulkPassageRowSchema = z.object({
+  title: z.string().min(2, "Title must be at least 2 characters"),
+  content: z.string().min(10, "Content must be at least 10 characters"),
+  language: z.enum(["english", "hindi", "marathi"]),
+  difficulty: z.enum(["easy", "medium", "hard"]),
+  speedCategory: z.union([z.literal(30), z.literal(40), z.literal(50), z.literal(60)]),
+});
+
+const bulkValidateBodySchema = z.object({ passages: z.array(z.unknown()) });
+const bulkImportBodySchema = z.object({ passages: z.array(z.unknown()).min(1), skipDuplicates: z.boolean().optional() });
 
 function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
@@ -22,7 +37,7 @@ function formatPassage(p: typeof passagesTable.$inferSelect) {
   };
 }
 
-router.get("/passages", requireAuth, async (req, res): Promise<void> => {
+router.get("/passages", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const params = ListPassagesQueryParams.safeParse(req.query);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -41,12 +56,12 @@ router.get("/passages", requireAuth, async (req, res): Promise<void> => {
   const where = and(...conditions);
 
   const passages = await db.select().from(passagesTable).where(where).limit(limit).offset(offset);
-  const all = await db.select().from(passagesTable).where(where);
+  const [{ value: total }] = await db.select({ value: count() }).from(passagesTable).where(where);
 
-  res.json({ passages: passages.map(formatPassage), total: all.length, page, limit });
+  res.json({ passages: passages.map(formatPassage), total, page, limit });
 });
 
-router.get("/passages/random", requireAuth, async (req, res): Promise<void> => {
+router.get("/passages/random", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const params = GetRandomPassageQueryParams.safeParse(req.query);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -71,7 +86,7 @@ router.get("/passages/random", requireAuth, async (req, res): Promise<void> => {
   res.json(formatPassage(random));
 });
 
-router.post("/passages", requireAuth, requireRole("teacher", "institute_admin", "super_admin"), async (req, res): Promise<void> => {
+router.post("/passages", requireAuth, requireActiveAccess(getOwnAccountAccess), requirePermission(PERMISSIONS.MANAGE_PASSAGES), async (req, res): Promise<void> => {
   const parsed = CreatePassageBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -88,7 +103,7 @@ router.post("/passages", requireAuth, requireRole("teacher", "institute_admin", 
   res.status(201).json(formatPassage(passage));
 });
 
-router.get("/passages/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/passages/:id", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
 
@@ -101,7 +116,7 @@ router.get("/passages/:id", requireAuth, async (req, res): Promise<void> => {
   res.json(formatPassage(passage));
 });
 
-router.patch("/passages/:id", requireAuth, requireRole("teacher", "institute_admin", "super_admin"), async (req, res): Promise<void> => {
+router.patch("/passages/:id", requireAuth, requireActiveAccess(getOwnAccountAccess), requirePermission(PERMISSIONS.MANAGE_PASSAGES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
 
@@ -125,7 +140,7 @@ router.patch("/passages/:id", requireAuth, requireRole("teacher", "institute_adm
   res.json(formatPassage(passage));
 });
 
-router.delete("/passages/:id", requireAuth, requireRole("teacher", "institute_admin", "super_admin"), async (req, res): Promise<void> => {
+router.delete("/passages/:id", requireAuth, requireActiveAccess(getOwnAccountAccess), requirePermission(PERMISSIONS.DELETE_PASSAGES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   await db.delete(passagesTable).where(eq(passagesTable.id, id));
@@ -133,40 +148,33 @@ router.delete("/passages/:id", requireAuth, requireRole("teacher", "institute_ad
 });
 
 // Feature 9: Admin Passage Bulk Import Matrix
-router.post("/passages/bulk-validate", requireAuth, requireRole("teacher", "institute_admin", "super_admin"), async (req, res): Promise<void> => {
-  const { passages } = req.body as { passages: Array<{title: string; content: string; language: string; difficulty: string; speedCategory: number}> };
-
-  if (!Array.isArray(passages)) {
+router.post("/passages/bulk-validate", requireAuth, requireActiveAccess(getOwnAccountAccess), requirePermission(PERMISSIONS.MANAGE_PASSAGES), async (req, res): Promise<void> => {
+  const parsedBody = bulkValidateBodySchema.safeParse(req.body);
+  if (!parsedBody.success) {
     res.status(400).json({ error: "passages must be an array" });
     return;
   }
-
-  const validLanguages = ["english", "hindi", "marathi"];
-  const validDifficulties = ["easy", "medium", "hard"];
-  const validSpeedCategories = [30, 40, 50, 60];
+  const { passages } = parsedBody.data;
 
   const errors: Array<{row: number; field: string; message: string}> = [];
   const duplicates: Array<{row: number; title: string; existingId: number}> = [];
-  const valid: typeof passages = [];
+  const valid: Array<z.infer<typeof bulkPassageRowSchema>> = [];
 
   for (let i = 0; i < passages.length; i++) {
-    const p = passages[i];
-    const rowErrors: string[] = [];
-
-    if (!p.title || p.title.trim().length < 2) errors.push({ row: i + 1, field: "title", message: "Title must be at least 2 characters" });
-    if (!p.content || p.content.trim().length < 10) errors.push({ row: i + 1, field: "content", message: "Content must be at least 10 characters" });
-    if (!validLanguages.includes(p.language)) errors.push({ row: i + 1, field: "language", message: `Language must be one of: ${validLanguages.join(", ")}` });
-    if (!validDifficulties.includes(p.difficulty)) errors.push({ row: i + 1, field: "difficulty", message: `Difficulty must be one of: ${validDifficulties.join(", ")}` });
-    if (!validSpeedCategories.includes(p.speedCategory)) errors.push({ row: i + 1, field: "speedCategory", message: `Speed category must be one of: ${validSpeedCategories.join(", ")}` });
-
-    if (rowErrors.length === 0) {
-      // Check for duplicate title
-      const [existing] = await db.select().from(passagesTable).where(ilike(passagesTable.title, p.title.trim()));
-      if (existing) {
-        duplicates.push({ row: i + 1, title: p.title, existingId: existing.id });
-      } else {
-        valid.push(p);
+    const rowResult = bulkPassageRowSchema.safeParse(passages[i]);
+    if (!rowResult.success) {
+      for (const issue of rowResult.error.issues) {
+        errors.push({ row: i + 1, field: String(issue.path[0] ?? "unknown"), message: issue.message });
       }
+      continue;
+    }
+
+    const p = rowResult.data;
+    const [existing] = await db.select().from(passagesTable).where(ilike(passagesTable.title, p.title.trim()));
+    if (existing) {
+      duplicates.push({ row: i + 1, title: p.title, existingId: existing.id });
+    } else {
+      valid.push(p);
     }
   }
 
@@ -180,23 +188,28 @@ router.post("/passages/bulk-validate", requireAuth, requireRole("teacher", "inst
   });
 });
 
-router.post("/passages/bulk-import", requireAuth, requireRole("teacher", "institute_admin", "super_admin"), async (req, res): Promise<void> => {
-  const { passages, skipDuplicates = true } = req.body as {
-    passages: Array<{title: string; content: string; language: string; difficulty: string; speedCategory: number}>;
-    skipDuplicates?: boolean;
-  };
-
-  if (!Array.isArray(passages) || passages.length === 0) {
+router.post("/passages/bulk-import", requireAuth, requireActiveAccess(getOwnAccountAccess), requirePermission(PERMISSIONS.MANAGE_PASSAGES), async (req, res): Promise<void> => {
+  const parsedBody = bulkImportBodySchema.safeParse(req.body);
+  if (!parsedBody.success) {
     res.status(400).json({ error: "passages must be a non-empty array" });
     return;
   }
+  const { passages, skipDuplicates = true } = parsedBody.data;
 
   const imported: typeof passagesTable.$inferSelect[] = [];
   const errors: Array<{row: number; field: string; message: string}> = [];
   let skipped = 0;
 
   for (let i = 0; i < passages.length; i++) {
-    const p = passages[i];
+    const rowResult = bulkPassageRowSchema.safeParse(passages[i]);
+    if (!rowResult.success) {
+      for (const issue of rowResult.error.issues) {
+        errors.push({ row: i + 1, field: String(issue.path[0] ?? "unknown"), message: issue.message });
+      }
+      continue;
+    }
+    const p = rowResult.data;
+
     try {
       if (skipDuplicates) {
         const [existing] = await db.select().from(passagesTable).where(ilike(passagesTable.title, p.title.trim()));

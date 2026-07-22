@@ -1,8 +1,10 @@
 import { Router } from "express";
-import { eq, and, SQL } from "drizzle-orm";
+import { eq, and, SQL, count } from "drizzle-orm";
 import { db, subscriptionsTable, usersTable } from "@workspace/db";
 import { ListSubscriptionsQueryParams, UpgradeSubscriptionBody } from "@workspace/api-zod";
-import { requireAuth, requireRole } from "../lib/auth";
+import { requireAuth } from "../lib/auth";
+import { requirePermission, PERMISSIONS } from "../lib/permissions";
+import { logAudit } from "../lib/audit";
 
 const router = Router();
 
@@ -89,7 +91,7 @@ router.get("/subscriptions/my", requireAuth, async (req, res): Promise<void> => 
   res.json(formatSubscription(sub));
 });
 
-router.get("/subscriptions", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
+router.get("/subscriptions", requireAuth, requirePermission(PERMISSIONS.MANAGE_SUBSCRIPTION), async (req, res): Promise<void> => {
   const params = ListSubscriptionsQueryParams.safeParse(req.query);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -105,22 +107,33 @@ router.get("/subscriptions", requireAuth, requireRole("super_admin"), async (req
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const subs = await db.select().from(subscriptionsTable).where(where).limit(limit).offset(offset);
-  const all = await db.select().from(subscriptionsTable).where(where);
+  const [{ value: total }] = await db.select({ value: count() }).from(subscriptionsTable).where(where);
 
-  res.json({ subscriptions: subs.map(formatSubscription), total: all.length, page, limit });
+  res.json({ subscriptions: subs.map(formatSubscription), total, page, limit });
 });
 
-router.post("/subscriptions/upgrade", requireAuth, async (req, res): Promise<void> => {
+// GAP #2 FIX: this used to let ANY authenticated user upgrade their OWN plan with zero payment
+// check — a straight payment bypass. Real upgrades now go through POST /api/payments/checkout +
+// the Razorpay webhook (routes/payments.ts). This endpoint survives ONLY as an owner tool for
+// granting free/lifetime access to a specific user, e.g. promo accounts or manual comps.
+router.post("/subscriptions/upgrade", requireAuth, requirePermission(PERMISSIONS.MANAGE_SUBSCRIPTION), async (req, res): Promise<void> => {
   const parsed = UpgradeSubscriptionBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
 
-  const expiresAt = new Date();
-  expiresAt.setMonth(expiresAt.getMonth() + 1);
+  const [targetUser] = await db.select().from(usersTable).where(eq(usersTable.id, parsed.data.userId));
+  if (!targetUser) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
 
-  const [existing] = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.userId, req.user!.userId));
+  const durationDays = parsed.data.durationDays ?? 30;
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + durationDays);
+
+  const [existing] = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.userId, parsed.data.userId));
 
   let sub;
   if (existing) {
@@ -129,10 +142,10 @@ router.post("/subscriptions/upgrade", requireAuth, async (req, res): Promise<voi
       status: "active",
       startedAt: new Date(),
       expiresAt,
-    }).where(eq(subscriptionsTable.userId, req.user!.userId)).returning();
+    }).where(eq(subscriptionsTable.userId, parsed.data.userId)).returning();
   } else {
     [sub] = await db.insert(subscriptionsTable).values({
-      userId: req.user!.userId,
+      userId: parsed.data.userId,
       plan: parsed.data.plan,
       status: "active",
       startedAt: new Date(),
@@ -140,7 +153,9 @@ router.post("/subscriptions/upgrade", requireAuth, async (req, res): Promise<voi
     }).returning();
   }
 
-  await db.update(usersTable).set({ subscriptionPlan: parsed.data.plan }).where(eq(usersTable.id, req.user!.userId));
+  await db.update(usersTable).set({ subscriptionPlan: parsed.data.plan, accountStatus: "active" }).where(eq(usersTable.id, parsed.data.userId));
+
+  await logAudit(req.user!.userId, "grant_subscription", "user", parsed.data.userId, { plan: parsed.data.plan, durationDays });
 
   res.json(formatSubscription(sub));
 });

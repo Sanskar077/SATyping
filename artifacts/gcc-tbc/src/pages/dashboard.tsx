@@ -5,8 +5,11 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { PersonalBestWidget } from "@/components/personal-best-widget";
+import { EmailVerificationBanner } from "@/components/email-verification-banner";
+import { useAuth } from "@/context/AuthContext";
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const { data: stats, isLoading } = useGetDashboardStats({
     query: {
       queryKey: getGetDashboardStatsQueryKey(),
@@ -31,6 +34,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
+      <EmailVerificationBanner emailVerified={user?.emailVerified} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>

@@ -27,7 +27,7 @@ services:
 
     startCommand: node artifacts/api-server/dist/index.mjs
 
-    healthCheckPath: /api/health
+    healthCheckPath: /api/healthz
 
     envVars:
       - key: NODE_ENV
@@ -40,6 +40,26 @@ services:
         sync: false             # Set in Render dashboard → Environment
       - key: CORS_ORIGIN
         sync: false             # e.g. https://your-app.vercel.app
+      - key: FRONTEND_URL
+        sync: false             # e.g. https://your-app.vercel.app — used to build email links
+      # Razorpay (payments) — from Razorpay Dashboard → Settings → API Keys / Webhooks
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      # Email (verification / password reset) — optional; if unset, emails are logged instead of sent
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
 
   # --------------------------------------------------------------------------
   # Frontend Static Site

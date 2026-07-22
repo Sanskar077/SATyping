@@ -1,7 +1,7 @@
 import { useListInstitutes, useListUsers } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Users, Shield, BookOpen, Upload } from "lucide-react";
+import { Building2, Users, Shield, BookOpen, Upload, Package, Tag, CreditCard, Wallet, ScrollText, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function AdminDashboard() {
@@ -106,6 +106,102 @@ export default function AdminDashboard() {
             </p>
             <Button asChild>
               <Link href="/admin/bulk-import">Open Bulk Import</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Package className="h-4 w-4 text-primary" />
+              Plans
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              Manage pricing plans for students and institutes.
+            </p>
+            <Button asChild>
+              <Link href="/admin/plans">Manage Plans</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Tag className="h-4 w-4 text-primary" />
+              Offers
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              Create and manage discount codes used at checkout.
+            </p>
+            <Button variant="outline" asChild>
+              <Link href="/admin/offers">Manage Offers</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-primary" />
+              Payments
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              View all payments across the platform and process refunds.
+            </p>
+            <Button variant="outline" asChild>
+              <Link href="/admin/payments">View Payments</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-primary" />
+              Commissions
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              Review and pay out institute referral commissions.
+            </p>
+            <Button variant="outline" asChild>
+              <Link href="/admin/commissions">Manage Commissions</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              Analytics
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              Revenue, student growth, and plan distribution at a glance.
+            </p>
+            <Button asChild>
+              <Link href="/admin/analytics">View Analytics</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ScrollText className="h-4 w-4 text-primary" />
+              Activity Logs
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              Audit trail of Owner actions and login history.
+            </p>
+            <Button variant="outline" asChild>
+              <Link href="/admin/activity-logs">View Activity Logs</Link>
             </Button>
           </CardContent>
         </Card>
