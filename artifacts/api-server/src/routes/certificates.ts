@@ -5,6 +5,7 @@ import { ListCertificatesQueryParams, GenerateCertificateBody, GetCertificatePar
 import { requireAuth } from "../lib/auth";
 import { requireActiveAccess } from "../lib/roles";
 import { getOwnAccountAccess } from "../lib/account-status";
+import { canReadUserData } from "../lib/ownership";
 import { randomUUID } from "crypto";
 
 const router = Router();
@@ -43,6 +44,10 @@ router.get("/certificates", requireAuth, requireActiveAccess(getOwnAccountAccess
 
   const { userId, language, page = 1, limit = 20 } = params.data;
   const targetUserId = userId ?? req.user!.userId;
+  if (!(await canReadUserData(req, targetUserId))) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   const conditions: SQL[] = [eq(certificatesTable.userId, targetUserId)];
   if (language) conditions.push(eq(certificatesTable.language, language));
 
@@ -123,6 +128,14 @@ router.get("/certificates/:id", requireAuth, requireActiveAccess(getOwnAccountAc
   const [cert] = await db.select().from(certificatesTable).where(eq(certificatesTable.id, id));
   if (!cert) {
     res.status(404).json({ error: "Certificate not found" });
+    return;
+  }
+
+  // Note: the PUBLIC verification route above (/certificates/verify/...) is intentionally open —
+  // that's the point of a verifiable certificate. This authenticated by-id route is not, so it
+  // must not leak another user's certificate to anyone who guesses an id.
+  if (!(await canReadUserData(req, cert.userId))) {
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
 

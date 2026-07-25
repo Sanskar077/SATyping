@@ -18,6 +18,7 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { toGraphemes, clusterMatch, VOWEL_LENGTHENING } from "@/lib/grapheme-utils";
+import { applyComposition } from "@/lib/ism-remington-map";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,12 @@ export interface TypingEngineResult {
   // ── Called by TypingArea ──────────────────────────────────────────────────
   appendChars:    (chars: string) => void;
   handleBackspace: () => void;
+  /**
+   * Applies Remington two-keystroke composition to the tail of the committed text
+   * (ा + े -> ो, half-letter + ा -> full consonant). Returns true if a rule fired and
+   * the text was rewritten; false if the caller should append normally.
+   */
+  composeChars:   (incoming: string) => boolean;
   // ── Free-mode only (Notepad): direct text control ─────────────────────────
   setText:        (text: string) => void;
   reset:          () => void;
@@ -85,6 +92,13 @@ export function useTypingEngine({
   // Stable ref so event-handler closures always see the latest passage length
   const passageTextRef = useRef(passageText);
   useEffect(() => { passageTextRef.current = passageText; }, [passageText]);
+
+  // Mirror of typedText for synchronous reads inside key handlers. Composition has to
+  // decide "does a rule fire against what's already committed?" during the keydown itself,
+  // which it can't do from async React state. Every writer keeps this in sync (see
+  // commitText below) — deliberately NOT synced from a useEffect, which would run after
+  // the next keystroke may already have read it.
+  const typedTextRef = useRef(typedText);
 
   // ── Language resolution ────────────────────────────────────────────────
   const language = useMemo(() => {
@@ -203,42 +217,69 @@ export function useTypingEngine({
   // ── Public handlers called by TypingArea ──────────────────────────────
   // `freeMode` (used by the Typing Notepad) disables the passage-length cap
   // so typing is never blocked — there is no passage to finish against.
+  //
+  // NOTE: every writer below updates `typedTextRef` synchronously in addition to calling
+  // setTypedText. The ref is what composition reads during a keydown, and React state is
+  // async — without the synchronous write, a fast typist's second keystroke would compose
+  // against stale text and drop or duplicate characters.
+  const commitText = useCallback((next: string) => {
+    typedTextRef.current = next;
+    setTypedText(next);
+  }, []);
+
   const appendChars = useCallback((chars: string) => {
     if (!chars || isCompleted) return;
     const norm = chars.normalize("NFC");
     setStartTime((p) => p ?? Date.now());
-    setTypedText((prev) => {
-      const lengthened = VOWEL_LENGTHENING[prev.slice(-1)]?.[norm];
-      const next = lengthened ? prev.slice(0, -1) + lengthened : prev + norm;
-      if (freeMode) return next;
-      const nextG   = toGraphemes(next);
+    const prev = typedTextRef.current;
+    const lengthened = VOWEL_LENGTHENING[prev.slice(-1)]?.[norm];
+    const next = lengthened ? prev.slice(0, -1) + lengthened : prev + norm;
+    if (!freeMode) {
       const passLen = toGraphemes(passageTextRef.current.normalize("NFC")).length;
-      return nextG.length > passLen ? prev : next;
-    });
-  }, [isCompleted, freeMode]);
+      if (toGraphemes(next).length > passLen) return; // cap reached — ignore the keystroke
+    }
+    commitText(next);
+  }, [isCompleted, freeMode, commitText]);
 
   const handleBackspace = useCallback(() => {
     if (isCompleted) return;
-    setTypedText((prev) => {
-      const g = toGraphemes(prev);
-      return g.length ? g.slice(0, -1).join("") : "";
-    });
-  }, [isCompleted]);
+    const g = toGraphemes(typedTextRef.current);
+    commitText(g.length ? g.slice(0, -1).join("") : "");
+  }, [isCompleted, commitText]);
+
+  /**
+   * Remington two-keystroke composition (see COMPOSITION_RULES in ism-remington-map.ts).
+   *
+   * Unlike appendChars this REPLACES the tail of the committed text rather than adding to
+   * it — ा followed by े becomes ो, a half-letter followed by ा becomes the full consonant.
+   * It never produces text longer than the plain append it replaces, so the passage-length
+   * cap cannot be exceeded here and needs no extra clamp.
+   *
+   * Returns true if a rule fired (text rewritten), false if the caller should append.
+   */
+  const composeChars = useCallback((incoming: string): boolean => {
+    if (isCompleted || !incoming) return false;
+    const composed = applyComposition(typedTextRef.current, incoming.normalize("NFC"));
+    if (composed === null) return false;
+    setStartTime((p) => p ?? Date.now());
+    commitText(composed);
+    return true;
+  }, [isCompleted, commitText]);
 
   // ── Free-mode only helpers (Notepad: load/clear/paste/undo-redo) ───────
   // Never used by exams/practice — those only ever call appendChars/
   // handleBackspace above, preserving existing anti-cheat guarantees.
   const setText = useCallback((text: string) => {
     setStartTime((p) => p ?? (text ? Date.now() : p));
-    setTypedText(text.normalize("NFC"));
-  }, []);
+    commitText(text.normalize("NFC"));
+  }, [commitText]);
 
   const reset = useCallback(() => {
-    setTypedText("");
+    commitText("");
     setStartTime(null);
     setElapsedSeconds(0);
     setIsCompleted(false);
-  }, []);
+  }, [commitText]);
 
   // ── Cluster state for rendering ───────────────────────────────────────
   const getClusterState = useCallback(
@@ -261,6 +302,6 @@ export function useTypingEngine({
     textareaRef, typedText, passageGraphemes, typedGraphemes,
     stats, elapsedSeconds, hasStarted, isCompleted, language,
     complete: handleComplete, getClusterState,
-    appendChars, handleBackspace, setText, reset,
+    appendChars, handleBackspace, composeChars, setText, reset,
   };
 }

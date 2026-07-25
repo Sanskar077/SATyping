@@ -11,16 +11,28 @@
  * block ASCII insertion, look up `event.key` in this map (event.key already
  * encodes Shift: 'a' vs 'A'), and insert the resulting Unicode string.
  *
- * ── The ि pre-consonant rule ────────────────────────────────────────────
- * On the physical ISM Remington layout, ONLY the short-i matra (ि) is typed
- * BEFORE the consonant (the carriage rolls back). Unicode requires the
- * opposite order: consonant THEN matra.
+ * ── Pre-consonant keys (there are TWO) ──────────────────────────────────
+ * Some marks are struck BEFORE the consonant they attach to, because that is
+ * where they sit visually on a mechanical typewriter. Unicode requires the
+ * logical order instead, so these are buffered and re-ordered:
  *
- *   User types:  f (= ि)  then  d (= क)
- *   We output:   क + ि = "कि"   (reversed from typing order)
+ *   1. Short-i matra (f = ि) — Unicode wants it AFTER the consonant:
+ *        f (ि) then d (क)  →  क + ि = "कि"
+ *   2. Reph (Shift+Z = र्) — Unicode wants it BEFORE the consonant:
+ *        Shift+Z (र्) then d (क)  →  र् + क = "र्क"
  *
- * 'f' is the ONLY pre-consonant key. Every other matra (ा ी ु ू े ै ो ौ ृ)
- * is typed AFTER the consonant and simply appended — no buffering needed.
+ * Reph must not be confused with rakar (lowercase z = ्र), which is struck
+ * AFTER its consonant: d (क) then z → "क्र".
+ *
+ * Every other matra (ा ी ु ू े ै ृ) is struck after the consonant and simply
+ * appended — no buffering needed.
+ *
+ * ── Two-keystroke composition ───────────────────────────────────────────
+ * Several glyphs have NO key of their own and are produced by a second key
+ * that REPLACES the previous character (see COMPOSITION_RULES below):
+ *   ो ौ ॉ  are built on ा;  आ ओ औ ऐ ई ऊ ँ ॥  are built likewise.
+ * A half-letter followed by ा completes it into the full consonant, which is
+ * the ONLY way to type ख घ थ ध भ श ष ण — they have no full-form key.
  *
  * ── Conjuncts, reph, and half-letters ───────────────────────────────────
  * There are two distinct ways to build half-letters/conjuncts, matching the
@@ -148,7 +160,9 @@ export const REMINGTON_MAP: Readonly<Record<string, string>> = {
   'W':'ॅ',            // U+0945 – candra-E / short-e matra
   'X':'ग'+HALF,        // explicit half-ga
   'Y':'ल'+HALF,        // explicit half-la
-  'Z':'र'+HALF,        // explicit half-ra
+  'Z':'\u001F_REPH',   // र् REPH — PRE-CONSONANT sentinel: typed BEFORE the consonant
+                       // it sits above (Shift+Z + क → र्क). Distinct from 'z' (rakar ्र),
+                       // which is typed AFTER. Per the Keyman Remington GAIL source.
 
   // ── Digits → Devanagari digits ──────────────────────────────────────────
   '1':'१','2':'२','3':'३','4':'४','5':'५',
@@ -197,9 +211,108 @@ export const REMINGTON_MAP: Readonly<Record<string, string>> = {
 /** Sentinel value stored in the map for the pre-consonant ि key. */
 export const PRE_I_SENTINEL = '\u001F_PRE_I';
 
+/**
+ * Sentinel for the reph key (Shift+Z). Like the short-i matra, reph is struck BEFORE the
+ * consonant it applies to, so it must be buffered and re-ordered rather than appended:
+ *
+ *   Shift+Z then the ka key  ->  reph + ka  (renders as one cluster)
+ *
+ * This is the SECOND pre-consonant key on the layout. It is deliberately distinct from the
+ * lowercase 'z' rakar, which is struck AFTER its consonant. Conflating the two -- as the
+ * previous plain half-ra mapping did -- produces visually similar but incorrectly ordered
+ * Unicode that fails grading.
+ */
+export const REPH_SENTINEL = '\u001F_REPH';
+
+/** Reph text: ra + virama, emitted before the following consonant. */
+export const REPH = '\u0930' + VIRAMA;
+
 /** True for any language that uses the ISM Remington Devanagari layout. */
 export function isDevanagariLanguage(language: string): boolean {
   return language === 'marathi' || language === 'hindi';
+}
+
+/**
+ * ─── Two-keystroke composition (Remington "dead-key" behaviour) ────────────
+ *
+ * On the real Remington/ISM layout a number of glyphs have NO key of their own —
+ * they are produced by striking a second key that REPLACES the previously committed
+ * character. This mirrors the mechanical typewriter, where ो is literally the ा
+ * hammer followed by the े hammer.
+ *
+ *   का + े  →  को      (keys: d k s)
+ *   का + ै  →  कौ      (keys: d k S)
+ *   का + ॅ  →  कॉ      (keys: d k W)
+ *   अ  + ा  →  आ       (keys: v k)
+ *   आ  + े  →  ओ       (keys: v k s)
+ *
+ * Verified against the Keyman "Remington GAIL (SIL)" keyboard source (an executable
+ * spec, not prose) and cross-checked against the ISM V6 Remington Marathi on-screen
+ * keyboard published by MPSC as an appendix to its typing skill-test notice. Both
+ * agree key-for-key, and the composites are independently attested by the
+ * long-published KrutiDev keystroke strings (को = "dks").
+ *
+ * Structure: PREVIOUS committed character → INCOMING character → REPLACEMENT.
+ * The previous character is removed and the replacement inserted in its place.
+ */
+export const COMPOSITION_RULES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  // Matras built on the ा hammer.
+  'ा': { 'े': 'ो', 'ै': 'ौ', 'ॅ': 'ॉ' },
+
+  // Independent vowels.
+  'अ': { 'ा': 'आ' },
+  'आ': { 'े': 'ओ', 'ै': 'औ', 'ॅ': 'ऑ' },
+  // Keyman specifies उ + ु; उ + ू is what a typist naturally reaches for. Both are
+  // accepted — grading only ever inspects the final committed Unicode, so being
+  // permissive costs nothing and avoids failing a candidate over keystroke order.
+  'उ': { 'ु': 'ऊ', 'ू': 'ऊ' },
+  // Likewise इ: Keyman composes ई from इ + reph (a legacy visual construction);
+  // इ + ी is the intuitive form and is accepted too.
+  'इ': { 'ी': 'ई' },
+  'ए': { 'े': 'ऐ', 'ॅ': 'ऍ' },
+
+  // Nasal marks: chandrabindu is ॅ + ं struck in either order.
+  'ॅ': { 'ं': 'ँ' },
+  'ं': { 'ॅ': 'ँ' },
+
+  // Doubled forms.
+  'ृ': { 'ृ': 'ॄ' },
+  '।': { '।': '॥' },
+};
+
+/**
+ * Half-letter + ा → full consonant.
+ *
+ * Several consonants (ख घ थ ध भ श ष ण, and क्ष) have NO full-form key on this layout —
+ * only a half-form key. The full letter is produced by following the half form with ा,
+ * which completes it by removing the halant. Without this rule those consonants are
+ * untypeable in full form, which for श in Marathi is a showstopper.
+ */
+function completeHalfLetter(prev: string, incoming: string): string | null {
+  if (incoming !== 'ा') return null; // only ा completes a half letter
+  if (prev.endsWith(VIRAMA + ZWJ)) return prev.slice(0, -2);
+  if (prev.endsWith(VIRAMA)) return prev.slice(0, -1);
+  return null;
+}
+
+/**
+ * Applies Remington two-keystroke composition to already-committed text.
+ *
+ * Returns the FULL replacement text if a rule fires, or null if the incoming
+ * character should simply be appended as normal.
+ */
+export function applyComposition(prev: string, incoming: string): string | null {
+  if (!prev || !incoming) return null;
+
+  // Half-letter completion matches on a suffix (virama/ZWJ) rather than a single
+  // character, so it is checked first and must not be shadowed by the table below.
+  const completed = completeHalfLetter(prev, incoming);
+  if (completed !== null) return completed;
+
+  const last = prev.slice(-1);
+  const replacement = COMPOSITION_RULES[last]?.[incoming];
+  if (replacement === undefined) return null;
+  return prev.slice(0, -1) + replacement;
 }
 
 /**

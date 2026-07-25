@@ -8,7 +8,7 @@ import { Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Keyboard, ArrowRight } from "lucide-react";
-import { REMINGTON_MAP, PRE_I_SENTINEL } from "@/lib/ism-remington-map";
+import { getKeyChar } from "@/lib/keyboard-metadata";
 
 // Optional human-readable hints for specific keys — annotation only, never a
 // second copy of the actual character data (that always comes from
@@ -36,9 +36,9 @@ const KEY_HINTS: Record<string, string> = {
 };
 
 function sample(key: string): { key: string; char: string; desc?: string } {
-  const raw = REMINGTON_MAP[key];
-  const char = raw === PRE_I_SENTINEL ? "ि" : raw ?? "";
-  return { key, char, desc: KEY_HINTS[key] };
+  // Delegates to getKeyChar so the sentinel→glyph substitution for BOTH pre-consonant
+  // keys (short-i matra and reph) lives in exactly one place.
+  return { key, char: getKeyChar(key), desc: KEY_HINTS[key] };
 }
 
 const NOSHIFT_QWERTY = ["q","w","e","r","t","y","u","i","o","p","[","]"].map(sample);

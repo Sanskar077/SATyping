@@ -28,6 +28,8 @@
 import {
   PRE_I_SENTINEL,
   PRE_I_MATRA,
+  REPH_SENTINEL,
+  REPH,
   DEVANAGARI_CONSONANTS,
   resolveKey,
   isDevanagariLanguage,
@@ -39,6 +41,17 @@ export interface TypingKeyHandlerOptions {
   isCompleted: boolean;
   appendChars: (chars: string) => void;
   handleBackspace: () => void;
+
+  /**
+   * Applies Remington two-keystroke composition (ा + े -> ो, half-letter + ा -> full
+   * consonant, etc). Given the character this keystroke produced, the engine rewrites the
+   * tail of the committed text if a rule fires and returns true; returns false if the
+   * character should just be appended.
+   *
+   * Supplied by the engine because composition must inspect and rewrite text the engine
+   * owns — this module never holds the committed string itself.
+   */
+  composeChars?: (incoming: string) => boolean;
 
   /**
    * When false (default — exams/practice/drills): Ctrl/Cmd+A/C/V/X/Z/Y are
@@ -68,13 +81,33 @@ export function attachTypingKeyHandlers(
   opts: TypingKeyHandlerOptions,
 ): () => void {
   const {
-    language, isCompleted, appendChars, handleBackspace,
+    language, isCompleted, appendChars, handleBackspace, composeChars,
     allowClipboard = false, onPaste, onUndo, onRedo, onSelectAll, onCopy,
   } = opts;
 
-  // Pre-consonant ि buffer — scoped to this attachment, matching the
-  // lifetime of the previous useRef-based implementation.
+  // Pre-consonant buffers — scoped to this attachment, matching the lifetime of the
+  // previous useRef-based implementation. There are exactly TWO pre-consonant keys on
+  // this layout: the short-i matra and reph.
   let pendingPreI = false;
+  let pendingReph = false;
+
+  /**
+   * Commits a resolved character, first giving the composition engine a chance to
+   * rewrite the tail (ा + े -> ो, half-letter + ा -> full consonant). Falls back to a
+   * plain append when no rule fires.
+   */
+  const commit = (chars: string) => {
+    if (composeChars?.(chars)) return;
+    appendChars(chars);
+  };
+
+  /** Flushes any buffered pre-consonant marks ahead of a space/newline/etc. */
+  const flushPending = (): string => {
+    let prefix = "";
+    if (pendingReph) { prefix += REPH; pendingReph = false; }
+    if (pendingPreI) { prefix += PRE_I_MATRA; pendingPreI = false; }
+    return prefix;
+  };
 
   // ── DEVANAGARI (Marathi / Hindi) — ISM Remington physical layout ───────
   if (isDevanagariLanguage(language)) {
@@ -105,8 +138,12 @@ export function attachTypingKeyHandlers(
       // ── Backspace ──────────────────────────────────────────────────
       if (e.key === "Backspace") {
         e.preventDefault();
+        // A buffered pre-consonant mark is not yet part of the committed text, so
+        // backspace cancels the buffer instead of deleting a real character.
         if (pendingPreI) {
-          pendingPreI = false; // cancel buffered ि, nothing removed
+          pendingPreI = false;
+        } else if (pendingReph) {
+          pendingReph = false;
         } else {
           handleBackspace();
         }
@@ -116,24 +153,14 @@ export function attachTypingKeyHandlers(
       // ── Space ─────────────────────────────────────────────────────
       if (e.code === "Space" || e.key === " ") {
         e.preventDefault();
-        if (pendingPreI) {
-          pendingPreI = false;
-          appendChars(PRE_I_MATRA + " ");
-        } else {
-          appendChars(" ");
-        }
+        appendChars(flushPending() + " ");
         return;
       }
 
       // ── Enter (Notepad allows newlines; exams don't use this branch) ─
       if (e.key === "Enter" && allowClipboard) {
         e.preventDefault();
-        if (pendingPreI) {
-          pendingPreI = false;
-          appendChars(PRE_I_MATRA + "\n");
-        } else {
-          appendChars("\n");
-        }
+        appendChars(flushPending() + "\n");
         return;
       }
 
@@ -149,25 +176,43 @@ export function attachTypingKeyHandlers(
 
       e.preventDefault();
 
+      // ── Pre-consonant keys (short-i matra, reph) ────────────────────
+      // Neither is committed on its own keystroke: both are buffered and emitted
+      // immediately before the consonant that follows.
       if (mapped === PRE_I_SENTINEL) {
         if (pendingPreI) {
-          appendChars(PRE_I_MATRA); // double press: commit first, stay buffered
+          // Double press: commit the first one and stay buffered.
+          appendChars(PRE_I_MATRA);
         } else {
           pendingPreI = true;
         }
         return;
       }
 
-      if (pendingPreI) {
-        pendingPreI = false;
-        if (DEVANAGARI_CONSONANTS.has(mapped)) {
-          appendChars(mapped + PRE_I_MATRA); // reorder: consonant THEN ि
+      if (mapped === REPH_SENTINEL) {
+        if (pendingReph) {
+          appendChars(REPH);
         } else {
-          appendChars(PRE_I_MATRA + mapped);
+          pendingReph = true;
         }
-      } else {
-        appendChars(mapped);
+        return;
       }
+
+      // ── Emit any buffered pre-consonant marks in the correct order ──
+      if (pendingPreI || pendingReph) {
+        const isConsonant = DEVANAGARI_CONSONANTS.has(mapped);
+        // Reph precedes the consonant; the short-i matra follows it in Unicode even
+        // though it is struck first. For a non-consonant there is nothing to reorder
+        // around, so the buffered marks are simply flushed ahead of it.
+        const reph = pendingReph ? REPH : "";
+        const preI = pendingPreI ? PRE_I_MATRA : "";
+        pendingReph = false;
+        pendingPreI = false;
+        appendChars(isConsonant ? reph + mapped + preI : reph + preI + mapped);
+        return;
+      }
+
+      commit(mapped);
     };
 
     // Ignore native 'input' entirely — we own committed text via keydown.
@@ -191,6 +236,7 @@ export function attachTypingKeyHandlers(
       ta.removeEventListener("input", onInput, true);
       ta.removeEventListener("paste", onPasteEvent);
       pendingPreI = false;
+      pendingReph = false;
     };
   }
 

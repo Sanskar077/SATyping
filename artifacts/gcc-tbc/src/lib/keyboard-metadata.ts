@@ -5,7 +5,7 @@
  * REMINGTON_MAP, the one and only source of truth for what a key produces. This file only adds
  * descriptive context on top of that.
  */
-import { REMINGTON_MAP, PRE_I_SENTINEL } from "@/lib/ism-remington-map";
+import { REMINGTON_MAP, PRE_I_SENTINEL, REPH_SENTINEL, REPH } from "@/lib/ism-remington-map";
 
 export type KeyCategory =
   | "consonant"
@@ -81,7 +81,7 @@ const META: Record<string, Omit<KeyMeta, "key">> = {
   W: { category: "matra", description: "Candra-E / short-e matra (ॅ)" },
   X: { category: "half-letter", description: "Explicit half-ga" },
   Y: { category: "half-letter", description: "Explicit half-la" },
-  Z: { category: "half-letter", description: "Explicit half-ra (alternate key)" },
+  Z: { category: "special", description: "Reph (र्) — typed BEFORE the consonant it sits above", examples: ["कर्म", "सर्व"] },
 
   // ── Digits ───────────────────────────────────────────────────────────
   "1": { category: "number", description: "Devanagari digit 1" },
@@ -150,7 +150,11 @@ export const KEY_METADATA: KeyMeta[] = Object.keys(REMINGTON_MAP).map((key) => {
 export function getKeyChar(key: string): string {
   const raw = REMINGTON_MAP[key];
   if (raw === undefined) return "";
-  return raw === PRE_I_SENTINEL ? "ि" : raw;
+  // Both pre-consonant keys store a control-character sentinel rather than real text —
+  // substitute a displayable glyph so the on-screen keyboard never renders a control char.
+  if (raw === PRE_I_SENTINEL) return "ि";
+  if (raw === REPH_SENTINEL) return REPH;
+  return raw;
 }
 
 export function getKeyMeta(key: string): KeyMeta | undefined {

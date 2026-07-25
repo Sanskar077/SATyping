@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -84,5 +84,43 @@ app.use(
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+// 404 for any /api/* path no router matched. Placed after the router so real routes win.
+app.use("/api", (_req: Request, res: Response) => {
+  res.status(404).json({ error: "Not found", code: "NOT_FOUND" });
+});
+
+// Centralized error handler — MUST be last and MUST keep all four args so Express treats it as an
+// error handler. Express 5 forwards rejected async route handlers here automatically, so individual
+// routes don't need their own try/catch to avoid an unhandled rejection. Logs with request context
+// via pino, never leaks a stack trace to the client, and always returns { error, code? }.
+app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+  // If the response already started streaming, defer to Express's default handler to close it.
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+
+  const status =
+    typeof (err as { status?: unknown })?.status === "number" ? (err as { status: number }).status :
+    typeof (err as { statusCode?: unknown })?.statusCode === "number" ? (err as { statusCode: number }).statusCode :
+    500;
+
+  const log = (req as Request & { log?: typeof logger }).log ?? logger;
+  log.error({ err, method: req.method, url: req.originalUrl?.split("?")[0], status }, "Unhandled request error");
+
+  // Never surface internal error text/stack for 5xx. For deliberate 4xx thrown with a message,
+  // it's safe to pass a short message through.
+  const clientMessage =
+    status >= 500
+      ? "Internal server error"
+      : (typeof (err as { message?: unknown })?.message === "string"
+          ? (err as { message: string }).message
+          : "Request failed");
+
+  const code = typeof (err as { code?: unknown })?.code === "string" ? (err as { code: string }).code : undefined;
+
+  res.status(status).json(code ? { error: clientMessage, code } : { error: clientMessage });
+});
 
 export default app;

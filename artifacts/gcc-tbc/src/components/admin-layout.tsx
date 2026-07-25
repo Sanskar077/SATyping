@@ -2,9 +2,9 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import {
-  Activity, User, BookOpen, FileText,
-  LogOut, LayoutDashboard, Settings,
-  Building2, Shield, Menu, X, GraduationCap, History, Timer, Upload, NotebookPen, Receipt, Keyboard,
+  Shield, User, BookOpen, LogOut, LayoutDashboard, Settings,
+  Building2, Users, Menu, X, Upload, Package, Tag, CreditCard,
+  Wallet, ScrollText, BarChart3,
 } from "lucide-react";
 import { useLogout } from "@workspace/api-client-react";
 import { useState } from "react";
@@ -15,44 +15,29 @@ interface NavItem {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  /** Match only on exact path (used for the overview root so it isn't active on every /admin/* page). */
+  exact?: boolean;
 }
 
-function buildNavItems(role: string): NavItem[] {
-  const base: NavItem[] = [
-    { href: "/dashboard",      label: "Dashboard",  icon: LayoutDashboard },
-    { href: "/practice",       label: "Practice",   icon: Activity },
-    { href: "/practice/drills", label: "Drills",    icon: Timer },       // Feature 3
-    { href: "/notepad",        label: "Notepad",    icon: NotebookPen },
-    { href: "/curriculum",     label: "Curriculum", icon: GraduationCap }, // Feature 5
-    { href: "/keyboard",       label: "Keyboard",   icon: Keyboard },
-    { href: "/exams",          label: "Exams",      icon: FileText },
-    { href: "/results",        label: "Results",    icon: BookOpen },
-    { href: "/sessions",       label: "Sessions",   icon: History },     // Feature 8
-    { href: "/billing",        label: "Billing",    icon: Receipt },
-  ];
-
-  if (role === "teacher") {
-    base.push({ href: "/teacher/dashboard", label: "Teaching", icon: GraduationCap });
-  }
-
-  if (role === "teacher" || role === "institute_admin" || role === "super_admin") {
-    base.push({ href: "/passages", label: "Passages", icon: BookOpen });
-  }
-
-  if (role === "teacher" || role === "institute_admin" || role === "super_admin") {
-    base.push({ href: "/admin/bulk-import", label: "Bulk Import", icon: Upload }); // Feature 9
-  }
-
-  if (role === "institute_admin" || role === "super_admin") {
-    base.push({ href: "/institute/dashboard", label: "Institute", icon: Building2 });
-  }
-
-  if (role === "super_admin") {
-    base.push({ href: "/admin", label: "Admin", icon: Shield });
-  }
-
-  return base;
-}
+/**
+ * Management-only navigation for the Owner (super_admin). Deliberately contains NO
+ * student/institute concepts (Practice, Exams, Results, Notepad, Curriculum) — the Owner
+ * runs the business, they don't practice typing. Keep this list in sync with the routes
+ * that pass `ownerAllowed` in App.tsx.
+ */
+const ADMIN_NAV: NavItem[] = [
+  { href: "/admin",               label: "Overview",      icon: LayoutDashboard, exact: true },
+  { href: "/admin/users",         label: "Users",         icon: Users },
+  { href: "/admin/institutes",    label: "Institutes",    icon: Building2 },
+  { href: "/passages",            label: "Passages",      icon: BookOpen },
+  { href: "/admin/bulk-import",   label: "Bulk Import",   icon: Upload },
+  { href: "/admin/plans",         label: "Plans",         icon: Package },
+  { href: "/admin/offers",        label: "Offers",        icon: Tag },
+  { href: "/admin/payments",      label: "Payments",      icon: CreditCard },
+  { href: "/admin/commissions",   label: "Commissions",   icon: Wallet },
+  { href: "/admin/analytics",     label: "Analytics",     icon: BarChart3 },
+  { href: "/admin/activity-logs", label: "Activity Logs", icon: ScrollText },
+];
 
 interface SidebarProps { onClose?: () => void; }
 
@@ -61,28 +46,19 @@ function SidebarContent({ onClose }: SidebarProps) {
   const [location, setLocation] = useLocation();
   const logoutMutation = useLogout();
 
-  const navItems = buildNavItems(user?.role ?? "student");
-
   const handleLogout = () => {
     logoutMutation.mutate(undefined, {
       onSettled: () => { logout(); setLocation("/login"); },
     });
   };
 
-  const roleLabel: Record<string, string> = {
-    student:        "Student",
-    teacher:        "Teacher",
-    institute_admin: "Institute Admin",
-    super_admin:    "Super Admin",
-  };
-
   return (
     <div className="flex flex-col h-full">
       <div className="h-16 flex items-center px-5 border-b border-border">
         <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm mr-2.5 flex-shrink-0">
-          <Activity className="h-4.5 w-4.5" />
+          <Shield className="h-4.5 w-4.5" />
         </span>
-        <span className="font-bold text-base tracking-tight">GCC-TBC Pro</span>
+        <span className="font-bold text-base tracking-tight">GCC-TBC Admin</span>
         <div className="ml-auto flex items-center gap-0.5">
           <ThemeToggle />
           <NotificationBell />
@@ -95,8 +71,10 @@ function SidebarContent({ onClose }: SidebarProps) {
       </div>
 
       <nav className="flex-1 overflow-y-auto py-5 px-3 space-y-0.5">
-        {navItems.map((item) => {
-          const isActive = location === item.href || location.startsWith(item.href + "/");
+        {ADMIN_NAV.map((item) => {
+          const isActive = item.exact
+            ? location === item.href
+            : location === item.href || location.startsWith(item.href + "/");
           return (
             <Link
               key={item.href}
@@ -126,7 +104,7 @@ function SidebarContent({ onClose }: SidebarProps) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{user?.name}</p>
-            <p className="text-xs text-muted-foreground truncate">{roleLabel[user?.role ?? "student"] ?? user?.role}</p>
+            <p className="text-xs text-muted-foreground truncate">Owner</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -146,7 +124,7 @@ function SidebarContent({ onClose }: SidebarProps) {
   );
 }
 
-export function AppLayout({ children }: { children: React.ReactNode }) {
+export function AdminLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -172,9 +150,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4 md:hidden flex-shrink-0">
           <div className="flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground flex-shrink-0">
-              <Activity className="h-4 w-4" />
+              <Shield className="h-4 w-4" />
             </span>
-            <span className="font-bold text-sm tracking-tight">GCC-TBC Pro</span>
+            <span className="font-bold text-sm tracking-tight">GCC-TBC Admin</span>
           </div>
           <div className="flex items-center gap-0.5">
             <ThemeToggle />

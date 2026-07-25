@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useListPlans } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
@@ -117,7 +118,9 @@ export default function Landing() {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="h-16 border-b border-border flex items-center justify-between px-6 lg:px-16 sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex items-center gap-2">
-          <Activity className="h-6 w-6 text-primary" />
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+            <Activity className="h-5 w-5" />
+          </span>
           <span className="font-bold text-xl tracking-tight">GCC-TBC Pro</span>
         </div>
         <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-muted-foreground">
@@ -125,7 +128,8 @@ export default function Landing() {
           <a href="#plans" className="hover:text-foreground transition-colors">Plans</a>
           <Link href="/login" className="hover:text-foreground transition-colors">Sign In</Link>
         </nav>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
           <Link href="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors hidden md:block">
             Sign In
           </Link>

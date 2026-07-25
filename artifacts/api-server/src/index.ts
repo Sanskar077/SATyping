@@ -4,6 +4,7 @@ import "./env";
 
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startSubscriptionSweep } from "./lib/subscription-sweep";
 
 const rawPort = process.env["PORT"];
 const port = rawPort ? Number(rawPort) : 3001;
@@ -19,4 +20,7 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // Keep stored accountStatus in sync with subscription expiry (see subscription-sweep.ts).
+  startSubscriptionSweep();
 });

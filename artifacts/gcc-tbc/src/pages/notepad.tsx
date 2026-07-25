@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
-  NotebookPen, Copy, Trash2, Undo2, Redo2, Type, Hash, Gauge, ClipboardPaste,
+  NotebookPen, Copy, Trash2, Undo2, Redo2, Type, Hash, Gauge, ClipboardPaste, Download,
 } from "lucide-react";
 import { useTypingEngine } from "@/hooks/use-typing-engine";
 import { NotepadTypingArea } from "@/components/notepad-typing-area";
@@ -29,10 +29,33 @@ const LANGUAGE_LABELS: Record<NotepadLanguage, string> = {
 };
 
 const STORAGE_PREFIX = "satyping:notepad:";
+const FONT_SIZE_KEY = "satyping:notepad:fontSize";
+
+const FONT_SIZES = [
+  { value: "text-base", label: "Small" },
+  { value: "text-xl", label: "Medium" },
+  { value: "text-2xl", label: "Large" },
+  { value: "text-3xl", label: "Extra large" },
+];
 
 export default function Notepad() {
   const { toast } = useToast();
   const [language, setLanguage] = useState<NotepadLanguage>("marathi");
+  const [fontSize, setFontSize] = useState<string>(() => {
+    try {
+      return localStorage.getItem(FONT_SIZE_KEY) ?? "text-xl";
+    } catch {
+      return "text-xl";
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(FONT_SIZE_KEY, fontSize);
+    } catch {
+      // Preference just won't persist; the notepad still works.
+    }
+  }, [fontSize]);
 
   const engine = useTypingEngine({
     passageText: "",
@@ -142,6 +165,25 @@ export default function Notepad() {
     textareaRef.current?.focus();
   }, [reset, textareaRef]);
 
+  const handleExport = useCallback(() => {
+    if (!typedText.trim()) {
+      toast({ title: "Nothing to export", description: "Type something first." });
+      return;
+    }
+    try {
+      // UTF-8 BOM so Windows Notepad/Excel open Devanagari correctly instead of as mojibake.
+      const blob = new Blob(["﻿" + typedText], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `satyping-notepad-${language}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({ title: "Export failed", description: "Your browser blocked the download.", variant: "destructive" });
+    }
+  }, [typedText, language, toast]);
+
   const handleSave = useCallback(() => {
     try {
       localStorage.setItem(STORAGE_PREFIX + language, typedText);
@@ -223,7 +265,17 @@ export default function Notepad() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
           <CardTitle className="text-base">{LANGUAGE_LABELS[language]}</CardTitle>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
+            <Select value={fontSize} onValueChange={setFontSize}>
+              <SelectTrigger className="w-32 h-9" aria-label="Typing area font size">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FONT_SIZES.map((f) => (
+                  <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button size="sm" variant="outline" onClick={handleUndo} title="Undo (Ctrl+Z)">
               <Undo2 className="h-4 w-4" />
             </Button>
@@ -232,6 +284,9 @@ export default function Notepad() {
             </Button>
             <Button size="sm" variant="outline" onClick={handleCopy} title="Copy (Ctrl+C)">
               <Copy className="h-4 w-4 mr-1" /> Copy
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleExport} title="Download as .txt">
+              <Download className="h-4 w-4 mr-1" /> Export
             </Button>
             <Button size="sm" variant="outline" onClick={handleClear} title="Clear">
               <Trash2 className="h-4 w-4 mr-1" /> Clear
@@ -245,6 +300,7 @@ export default function Notepad() {
           <NotepadTypingArea
             engine={engine}
             language={language}
+            fontSize={fontSize}
             onPaste={handlePaste}
             onUndo={handleUndo}
             onRedo={handleRedo}

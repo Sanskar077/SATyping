@@ -1,10 +1,20 @@
 /**
- * Practice Session page — enhanced with:
- * Feature 1: Live keystroke logging → Replay + Heatmap on completion
- * Feature 2: User input capture → Error Word List on completion
- * Feature 4: Real-time WPM graph during typing
+ * Practice Session — split-panel GCC-TBC transcription flow.
+ *
+ * Left panel shows the passage as clean readable text; the right panel is a free-typing answer
+ * box the user transcribes into, with a countdown (timed) or count-up (untimed) clock and a
+ * Submit button. This mirrors the actual government exam interface, where you retype a printed
+ * passage into a separate answer field rather than overlay-typing on top of it.
+ *
+ * Scoring is recomputed on submit from a word-aligned diff of the passage against the final
+ * committed Unicode text (see lib/transcription-grading.ts) — positional character comparison
+ * can't be used here because a single omitted word would shift every later character.
+ *
+ * Retained from the previous overlay flow: the live WPM timeline (Feature 4) and the error-word
+ * breakdown (Feature 2). Dropped for this mode: keystroke replay and the key heatmap (Feature 1) —
+ * see the note above `KEYSTROKE_ANALYSIS_ENABLED` below.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   useGetTypingSession,
@@ -15,14 +25,25 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, Activity, Target, Zap, BarChart2, Keyboard, AlertTriangle } from "lucide-react";
-import { useTypingEngine, type TypingStats } from "@/hooks/use-typing-engine";
-import { TypingArea } from "@/components/typing-area";
+import { Clock, Activity, Target, Zap, BarChart2, FileText, PenLine, Send } from "lucide-react";
+import { useTypingEngine } from "@/hooks/use-typing-engine";
+import { AnswerTypingArea } from "@/components/answer-typing-area";
 import { WpmLiveChart, type WpmSnapshot } from "@/components/wpm-live-chart";
-import { ReplayPlayer } from "@/components/replay-player";
-import { KeystrokeHeatmap, type KeystrokeEntry } from "@/components/keystroke-heatmap";
 import { ErrorWordList } from "@/components/error-word-list";
+import { gradeTranscription } from "@/lib/transcription-grading";
+import { readPracticeConfig } from "@/lib/practice-config";
+
+/**
+ * Keystroke replay + heatmap are intentionally NOT rendered in the split-panel practice mode.
+ *
+ * Tradeoff: both features were built for overlay typing, where every keystroke maps to a known
+ * passage position, so a replay could show "typed the right/wrong character HERE" and the heatmap
+ * could attribute errors to specific keys. In free transcription there is no such positional
+ * anchor — the user may omit, reorder, or re-type whole words — so a replay degrades to "keys in
+ * the order pressed" and the heatmap to raw key frequency, neither of which teaches anything.
+ * The word-level error breakdown below is the meaningful analysis for this mode. Exams still use
+ * the overlay flow and keep both features.
+ */
 
 export default function PracticeSession() {
   const { sessionId } = useParams();
@@ -34,133 +55,122 @@ export default function PracticeSession() {
   });
 
   const updateSession = useUpdateTypingSession();
-  const passageText    = session?.passage?.content ?? "";
+  const passageText = session?.passage?.content ?? "";
   const passageLanguage = session?.passage?.language ?? "marathi";
 
-  // ─── Feature 1: Keystroke log ────────────────────────────────────────────────
-  const keystrokeLogRef = useRef<KeystrokeEntry[]>([]);
-  // Keep a stable ref to avoid re-creating the listener
-  const isCompletedRef  = useRef(false);
+  // Timing choice made in the setup wizard. Absent (deep link) → untimed.
+  const config = useMemo(() => readPracticeConfig(id), [id]);
+  const isTimed = config?.isTimed ?? false;
+  const limitSeconds = isTimed && config?.durationMinutes ? config.durationMinutes * 60 : null;
 
-  // ─── Feature 4: WPM timeline ─────────────────────────────────────────────────
-  const [wpmSnapshots, setWpmSnapshots] = useState<WpmSnapshot[]>([]);
-  const statsRef        = useRef<TypingStats | null>(null);
-  const elapsedRef      = useRef(0);
-  const hasStartedRef   = useRef(false);
+  // freeMode: the answer box must not be capped at the passage length, and must not auto-complete
+  // the moment the grapheme count matches — the user decides when they're done (or the clock does).
+  const engine = useTypingEngine({
+    passageText,
+    language: passageLanguage,
+    freeMode: true,
+  });
+  const { typedText, elapsedSeconds, hasStarted } = engine;
 
-  // ─── Feature 2: User input capture ───────────────────────────────────────────
-  const typedTextRef    = useRef("");
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const isSubmittedRef = useRef(false);
 
-  const handleComplete = useCallback(
-    (s: TypingStats, elapsedSeconds: number) => {
-      isCompletedRef.current = true;
-      updateSession.mutate({
-        id,
-        data: {
-          status: TypingSessionUpdateStatus.completed,
-          grossWpm:      s.grossWpm,
-          netWpm:        s.wpm,
-          accuracy:      s.accuracy,
-          totalChars:    s.totalTyped,
-          correctChars:  s.correctChars,
-          incorrectChars: s.incorrectChars,
-          durationSeconds: elapsedSeconds,
-          // Feature 1
-          keystrokeData: JSON.stringify(
-            keystrokeLogRef.current.map(k => ({ ...k, timestamp: k.timestamp - (keystrokeLogRef.current[0]?.timestamp ?? 0) }))
-          ),
-          // Feature 4
-          wpmTimeline: JSON.stringify(wpmSnapshots),
-          // Feature 2
-          userInput: typedTextRef.current,
-        },
-      });
-    },
-    [id, updateSession, wpmSnapshots],
+  // Live stats, recomputed from the word-aligned diff so the on-screen WPM/accuracy match exactly
+  // what the final submitted score will be.
+  const liveStats = useMemo(
+    () => gradeTranscription(passageText, typedText, elapsedSeconds),
+    [passageText, typedText, elapsedSeconds],
   );
+  const liveStatsRef = useRef(liveStats);
+  useEffect(() => { liveStatsRef.current = liveStats; });
 
-  const engine = useTypingEngine({ passageText, language: passageLanguage, onComplete: handleComplete });
-  const { stats, elapsedSeconds, isCompleted, hasStarted } = engine;
+  const elapsedSecondsRef = useRef(elapsedSeconds);
+  useEffect(() => { elapsedSecondsRef.current = elapsedSeconds; });
 
-  // Keep refs in sync (no-dep effects so they always update)
-  useEffect(() => { statsRef.current    = stats; });
-  useEffect(() => { elapsedRef.current  = elapsedSeconds; });
-  useEffect(() => { hasStartedRef.current = hasStarted; });
-  useEffect(() => { typedTextRef.current = engine.typedText; });
+  const [wpmSnapshots, setWpmSnapshots] = useState<WpmSnapshot[]>([]);
+  const [finalStats, setFinalStats] = useState<ReturnType<typeof gradeTranscription> | null>(null);
+  const [finalElapsed, setFinalElapsed] = useState(0);
 
-  // ─── Feature 1: Attach keystroke listener — scoped to textarea focus ────────
+  const handleSubmit = useCallback(() => {
+    if (isSubmittedRef.current) return;
+    isSubmittedRef.current = true;
+
+    const elapsed = elapsedSeconds;
+    const graded = gradeTranscription(passageText, typedText, elapsed);
+    setFinalStats(graded);
+    setFinalElapsed(elapsed);
+    setIsSubmitted(true);
+
+    updateSession.mutate({
+      id,
+      data: {
+        status: TypingSessionUpdateStatus.completed,
+        grossWpm: graded.grossWpm,
+        netWpm: graded.netWpm,
+        accuracy: graded.accuracy,
+        totalChars: graded.totalTyped,
+        correctChars: graded.correctChars,
+        incorrectChars: graded.incorrectChars,
+        durationSeconds: elapsed,
+        wpmTimeline: JSON.stringify(wpmSnapshots),
+        userInput: typedText,
+      },
+    });
+  }, [id, passageText, typedText, elapsedSeconds, wpmSnapshots, updateSession]);
+
+  // Sample the WPM timeline every 3s while typing.
   useEffect(() => {
-    const IGNORE = new Set(["Shift","Control","Alt","Meta","CapsLock","Tab","Escape","Enter","Process"]);
-
-    const onKey = (e: KeyboardEvent) => {
-      if (isCompletedRef.current) return;
-      if (IGNORE.has(e.key)) return;
-      // Only capture when the typing textarea actually has focus (prevents
-      // logging nav keystrokes, modal keys, etc.)
-      if (document.activeElement?.tagName !== "TEXTAREA") return;
-
-      keystrokeLogRef.current.push({
-        key: e.key,
-        char: e.key === "Backspace" ? "" : e.key,
-        timestamp: Date.now(),
-        isCorrect: true, // refined during replay
-      });
-    };
-
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []); // mount-once — all mutable state accessed via stable refs
-
-  // ─── Feature 4: WPM sampling every 3 s — stops as soon as session ends ──────
-  useEffect(() => {
-    // Guard both: must be started AND not yet complete
-    if (!hasStarted || isCompleted) return;
+    if (!hasStarted || isSubmitted) return undefined;
     const timerId = setInterval(() => {
-      // Double-check via ref so the callback itself is always safe
-      if (isCompletedRef.current) return;
-      const s = statsRef.current;
-      const t = elapsedRef.current;
-      if (!s) return;
-      setWpmSnapshots(prev => [...prev, { time: t, wpm: s.wpm, accuracy: s.accuracy, errors: s.incorrectChars }]);
+      if (isSubmittedRef.current) return;
+      const s = liveStatsRef.current;
+      setWpmSnapshots((prev) => [
+        ...prev,
+        { time: elapsedSecondsRef.current, wpm: s.netWpm, accuracy: s.accuracy, errors: s.incorrectChars },
+      ]);
     }, 3000);
     return () => clearInterval(timerId);
-  }, [hasStarted, isCompleted]); // re-evaluates when either flag flips
+  }, [hasStarted, isSubmitted]);
 
-  // ── Full-screen loading ───────────────────────────────────────────────────────
+  // Timed mode: auto-submit the moment the clock hits zero.
+  const remainingSeconds = limitSeconds !== null ? Math.max(0, limitSeconds - elapsedSeconds) : null;
+  useEffect(() => {
+    if (limitSeconds === null || isSubmitted || !hasStarted) return;
+    if (elapsedSeconds >= limitSeconds) handleSubmit();
+  }, [elapsedSeconds, limitSeconds, isSubmitted, hasStarted, handleSubmit]);
+
   if (isLoading) {
     return (
-      <div className="w-full max-w-5xl mx-auto space-y-4 mt-4 overflow-hidden">
+      <div className="w-full max-w-7xl mx-auto space-y-4 mt-4">
         <div className="h-12 bg-muted rounded animate-pulse" />
-        <Card className="border-2 w-full overflow-hidden">
-          <CardContent className="p-6 md:p-8">
-            <div className="animate-pulse space-y-3">
-              <div className="h-8 bg-muted rounded w-full" />
-              <div className="h-8 bg-muted rounded w-11/12" />
-              <div className="h-8 bg-muted rounded w-4/5" />
-            </div>
-          </CardContent>
-        </Card>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card><CardContent className="p-6"><div className="animate-pulse space-y-3">
+            <div className="h-6 bg-muted rounded w-full" />
+            <div className="h-6 bg-muted rounded w-11/12" />
+            <div className="h-6 bg-muted rounded w-4/5" />
+          </div></CardContent></Card>
+          <Card><CardContent className="p-6"><div className="h-48 bg-muted rounded animate-pulse" /></CardContent></Card>
+        </div>
       </div>
     );
   }
 
-  // ── Completed screen ──────────────────────────────────────────────────────────
-  if (isCompleted) {
-    const finalKeystrokes = keystrokeLogRef.current;
+  // ── Results ────────────────────────────────────────────────────────────────
+  if (isSubmitted && finalStats) {
     return (
       <div className="max-w-4xl mx-auto mt-6 space-y-6">
         <Card>
           <CardContent className="pt-8 pb-6 px-8">
-            <h2 className="text-2xl font-bold text-center mb-6">Session Complete!</h2>
+            <h2 className="text-2xl font-bold text-center mb-6">Practice Complete</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-              <Stat label="Net WPM"   value={stats.wpm}              color="text-primary" />
-              <Stat label="Gross WPM" value={stats.grossWpm} />
-              <Stat label="Accuracy"  value={`${stats.accuracy}%`} />
-              <Stat label="Time"      value={fmt(elapsedSeconds)} />
-              <Stat label="CPM"       value={stats.cpm} />
-              <Stat label="Correct"   value={stats.correctChars}   color="text-green-600" />
-              <Stat label="Errors"    value={stats.incorrectChars} color="text-destructive" />
-              <Stat label="Total"     value={stats.totalTyped} />
+              <Stat label="Net WPM" value={finalStats.netWpm} color="text-primary" />
+              <Stat label="Gross WPM" value={finalStats.grossWpm} />
+              <Stat label="Accuracy" value={`${finalStats.accuracy}%`} />
+              <Stat label="Time" value={fmt(finalElapsed)} />
+              <Stat label="CPM" value={finalStats.cpm} />
+              <Stat label="Correct" value={finalStats.correctChars} color="text-green-600" />
+              <Stat label="Errors" value={finalStats.incorrectChars} color="text-destructive" />
+              <Stat label="Wrong words" value={finalStats.wrongWords} color="text-destructive" />
             </div>
             <div className="mt-6 flex justify-center gap-4">
               <Button variant="outline" onClick={() => setLocation("/dashboard")}>Dashboard</Button>
@@ -169,100 +179,100 @@ export default function PracticeSession() {
           </CardContent>
         </Card>
 
-        {/* Feature 4: WPM chart recap */}
         {wpmSnapshots.length >= 2 && (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
-                <BarChart2 className="h-4 w-4 text-primary" />
-                WPM Progress During Session
+                <BarChart2 className="h-4 w-4 text-primary" />WPM Progress During Session
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <WpmLiveChart snapshots={wpmSnapshots} />
-            </CardContent>
+            <CardContent><WpmLiveChart snapshots={wpmSnapshots} /></CardContent>
           </Card>
         )}
 
-        {/* Features 1, 2 — Tabs */}
-        <Tabs defaultValue="errors">
-          <TabsList className="grid grid-cols-3 w-full">
-            <TabsTrigger value="errors">
-              <AlertTriangle className="h-3.5 w-3.5 mr-1" />Error Words
-            </TabsTrigger>
-            <TabsTrigger value="replay">
-              <Activity className="h-3.5 w-3.5 mr-1" />Replay
-            </TabsTrigger>
-            <TabsTrigger value="heatmap">
-              <Keyboard className="h-3.5 w-3.5 mr-1" />Key Heatmap
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Feature 2: Error Word List */}
-          <TabsContent value="errors">
-            <ErrorWordList
-              passageText={passageText}
-              userInput={typedTextRef.current}
-            />
-          </TabsContent>
-
-          {/* Feature 1a: Replay */}
-          <TabsContent value="replay">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Session Replay</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ReplayPlayer keystrokes={finalKeystrokes} passageText={passageText} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Feature 1b: Heatmap */}
-          <TabsContent value="heatmap">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Keystroke Heatmap</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <KeystrokeHeatmap keystrokes={finalKeystrokes} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+        <ErrorWordList passageText={passageText} userInput={typedText} />
       </div>
     );
   }
 
-  // ── Active session ────────────────────────────────────────────────────────────
-  return (
-    <div className="w-full max-w-5xl mx-auto space-y-4 overflow-hidden">
+  // ── Active split-panel session ─────────────────────────────────────────────
+  const isDevanagari = passageLanguage === "marathi" || passageLanguage === "hindi";
 
+  return (
+    <div className="w-full max-w-7xl mx-auto space-y-4">
       {/* Stats bar */}
-      <div className="flex items-center justify-between bg-card px-6 py-3 rounded-lg border shadow-sm sticky top-0 z-20 w-full overflow-hidden">
+      <div className="flex items-center justify-between bg-card px-6 py-3 rounded-lg border shadow-sm flex-wrap gap-3">
         <div className="flex gap-8">
-          <Pill icon={<Activity className="h-4 w-4 text-primary" />} label="WPM" value={stats.wpm} />
-          <Pill icon={<Target   className="h-4 w-4 text-primary" />} label="Acc" value={`${stats.accuracy}%`} />
-          <Pill icon={<Zap      className="h-4 w-4 text-primary" />} label="CPM" value={stats.cpm} />
+          <Pill icon={<Activity className="h-4 w-4 text-primary" />} label="WPM" value={liveStats.netWpm} />
+          <Pill icon={<Target className="h-4 w-4 text-primary" />} label="Acc" value={`${liveStats.accuracy}%`} />
+          <Pill icon={<Zap className="h-4 w-4 text-primary" />} label="CPM" value={liveStats.cpm} />
         </div>
         <div className="flex items-center gap-2 font-mono text-lg font-semibold">
           <Clock className="h-4 w-4 text-muted-foreground" />
-          {fmt(elapsedSeconds)}
+          {remainingSeconds !== null ? fmt(remainingSeconds) : fmt(elapsedSeconds)}
+          <span className="text-xs font-sans font-normal text-muted-foreground">
+            {remainingSeconds !== null ? "left" : "elapsed"}
+          </span>
         </div>
       </div>
 
-      <Progress value={stats.progress} className="h-1.5" />
+      <Progress value={liveStats.progress} className="h-1.5" />
 
-      {/* Passage card */}
-      <Card className="shadow-md border-2 w-full overflow-hidden">
-        <CardContent className="p-6 md:p-8 min-h-[280px]">
-          <TypingArea engine={engine} fontSize="text-2xl" />
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Left: question */}
+        <Card className="overflow-hidden">
+          <CardHeader className="bg-muted/50 border-b py-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <FileText className="h-4 w-4 text-primary" />Speed Practice Question
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div
+              className="min-h-[20rem] whitespace-pre-wrap break-words text-foreground/90 select-none"
+              style={{
+                fontFamily: isDevanagari
+                  ? "'Noto Sans Devanagari', 'Mangal', 'Kokila', 'Arial Unicode MS', sans-serif"
+                  : "'Courier New', 'Courier', monospace",
+                lineHeight: "2",
+                letterSpacing: isDevanagari ? "0.03em" : "0.05em",
+                fontSize: "1.125rem",
+              }}
+            >
+              {passageText}
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Feature 4: Live WPM chart */}
+        {/* Right: answer */}
+        <Card className="overflow-hidden">
+          <CardHeader className="bg-muted/50 border-b py-3 flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <PenLine className="h-4 w-4 text-primary" />Speed Practice Answer
+            </CardTitle>
+            <span className={`font-mono text-sm font-semibold ${
+              remainingSeconds !== null && remainingSeconds <= 30 ? "text-destructive" : "text-muted-foreground"
+            }`}>
+              {remainingSeconds !== null ? fmt(remainingSeconds) : fmt(elapsedSeconds)}
+            </span>
+          </CardHeader>
+          <CardContent className="p-4 space-y-3">
+            <AnswerTypingArea engine={engine} language={passageLanguage} fontSize="text-lg" />
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {hasStarted
+                  ? `${liveStats.totalTyped} / ${liveStats.totalPassage} characters`
+                  : "Start typing to begin."}
+              </span>
+              <Button onClick={handleSubmit} disabled={!hasStarted}>
+                <Send className="h-4 w-4 mr-2" />Submit
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {hasStarted && (
-        <Card className="w-full">
+        <Card>
           <CardHeader className="pb-0 pt-3 px-4">
             <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Live WPM</CardTitle>
           </CardHeader>
@@ -271,22 +281,13 @@ export default function PracticeSession() {
           </CardContent>
         </Card>
       )}
-
-      <div className="flex items-center justify-between text-sm text-muted-foreground px-1">
-        <span>
-          {hasStarted
-            ? `${stats.totalTyped} / ${stats.totalPassage} chars typed`
-            : "Start typing to begin the session. Press ? for keyboard reference."}
-        </span>
-        <Button variant="ghost" size="sm" onClick={engine.complete}>End Early</Button>
-      </div>
     </div>
   );
 }
 
-const fmt = (s: number) => `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
+const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
-function Stat({ label, value, color="" }: { label:string; value:string|number; color?:string }) {
+function Stat({ label, value, color = "" }: { label: string; value: string | number; color?: string }) {
   return (
     <div>
       <p className="text-muted-foreground text-sm">{label}</p>
@@ -295,7 +296,7 @@ function Stat({ label, value, color="" }: { label:string; value:string|number; c
   );
 }
 
-function Pill({ icon, label, value }: { icon:React.ReactNode; label:string; value:string|number }) {
+function Pill({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {
   return (
     <div className="flex items-center gap-2">
       {icon}

@@ -10,6 +10,7 @@ import { requireAuth } from "../lib/auth";
 import { requireActiveAccess } from "../lib/roles";
 import { requirePermission, PERMISSIONS } from "../lib/permissions";
 import { getOwnAccountAccess } from "../lib/account-status";
+import { canReadUserData } from "../lib/ownership";
 import { randomUUID } from "crypto";
 
 const router = Router();
@@ -138,6 +139,10 @@ router.get("/test-attempts", requireAuth, requireActiveAccess(getOwnAccountAcces
 
   const { userId, testId, language, page = 1, limit = 20 } = params.data;
   const targetUserId = userId ?? req.user!.userId;
+  if (!(await canReadUserData(req, targetUserId))) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   const conditions: SQL[] = [eq(testAttemptsTable.userId, targetUserId)];
   if (testId) conditions.push(eq(testAttemptsTable.testId, testId));
 
@@ -205,6 +210,11 @@ router.get("/test-attempts/:id", requireAuth, requireActiveAccess(getOwnAccountA
   const [attempt] = await db.select().from(testAttemptsTable).where(eq(testAttemptsTable.id, id));
   if (!attempt) {
     res.status(404).json({ error: "Attempt not found" });
+    return;
+  }
+
+  if (!(await canReadUserData(req, attempt.userId))) {
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
 

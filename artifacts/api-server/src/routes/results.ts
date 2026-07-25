@@ -5,6 +5,7 @@ import { ListResultsQueryParams, GetResultParams, GetLeaderboardQueryParams } fr
 import { requireAuth } from "../lib/auth";
 import { requireActiveAccess } from "../lib/roles";
 import { getOwnAccountAccess } from "../lib/account-status";
+import { canReadUserData } from "../lib/ownership";
 
 const router = Router();
 
@@ -194,6 +195,13 @@ router.get("/results", requireAuth, requireActiveAccess(getOwnAccountAccess), as
 
   const { userId, testAttemptId, language, passed, page = 1, limit = 20 } = params.data;
   const targetUserId = userId ?? req.user!.userId;
+  // A caller may only read someone else's results if they own them, are the Owner, or run the
+  // target's institute — otherwise any authenticated user could enumerate other students' results
+  // by passing an arbitrary userId.
+  if (!(await canReadUserData(req, targetUserId))) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   const conditions: SQL[] = [eq(resultsTable.userId, targetUserId)];
   if (testAttemptId) conditions.push(eq(resultsTable.testAttemptId, testAttemptId));
   if (language) conditions.push(eq(resultsTable.language, language));
@@ -217,6 +225,13 @@ router.get("/results/:id", requireAuth, requireActiveAccess(getOwnAccountAccess)
   const [result] = await db.select().from(resultsTable).where(eq(resultsTable.id, id));
   if (!result) {
     res.status(404).json({ error: "Result not found" });
+    return;
+  }
+
+  // Same ownership rule as the list endpoint — a raw result id must not expose another
+  // student's score to anyone who guesses/enumerates it.
+  if (!(await canReadUserData(req, result.userId))) {
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
 

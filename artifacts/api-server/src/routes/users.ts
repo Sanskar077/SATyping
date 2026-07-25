@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { eq, ilike, and, SQL } from "drizzle-orm";
+import { eq, ilike, and, count, SQL } from "drizzle-orm";
 import { db, usersTable, institutesTable } from "@workspace/db";
 import { ListUsersQueryParams, GetUserParams, UpdateUserParams, UpdateUserBody, DeleteUserParams, SetUserPremiumParams, SetUserPremiumBody } from "@workspace/api-zod";
-import { requireAuth, requireRole } from "../lib/auth";
+import { requireAuth } from "../lib/auth";
 import { requirePermission, PERMISSIONS } from "../lib/permissions";
 import { computeHasAccess } from "../lib/account-status";
 import { logAudit } from "../lib/audit";
@@ -55,10 +55,12 @@ router.get("/users", requireAuth, requirePermission(PERMISSIONS.MANAGE_USERS), a
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const users = await db.select().from(usersTable).where(where).limit(limit).offset(offset);
-  const total = await db.select({ count: usersTable.id }).from(usersTable).where(where);
+  // count() over the same filter — selecting ids and using .length counted only the CURRENT page,
+  // so `total` never exceeded `limit` and pagination controls broke past page 1.
+  const [{ value: total }] = await db.select({ value: count() }).from(usersTable).where(where);
 
   const formatted = users.map(u => formatUser(u));
-  res.json({ users: formatted, total: total.length, page, limit });
+  res.json({ users: formatted, total, page, limit });
 });
 
 router.get("/users/:id", requireAuth, async (req, res): Promise<void> => {
@@ -145,7 +147,11 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
   res.json(formatUser(user));
 });
 
-router.delete("/users/:id", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
+// Deleting a user account is an admin-management action, gated by MANAGE_ADMINS. Only the Owner
+// holds that permission today (it's absent from every non-owner role in ROLE_PERMISSIONS), so this
+// is behaviourally identical to the previous requireRole("super_admin") — but now the permission is
+// actually enforced somewhere, so granting it to a future sub-role would extend this route to them.
+router.delete("/users/:id", requireAuth, requirePermission(PERMISSIONS.MANAGE_ADMINS), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
 

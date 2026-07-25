@@ -50,6 +50,7 @@ export default function Login() {
             description: "Logged in successfully",
           });
           const destinationByRole: Record<string, string> = {
+            teacher: "/teacher/dashboard",
             institute_admin: "/institute/dashboard",
             super_admin: "/admin",
           };

@@ -28,18 +28,18 @@ export function NotepadTypingArea({
   engine, language, onPaste, onUndo, onRedo, onSelectAll, onCopy,
   fontSize = "text-xl",
 }: Props) {
-  const { textareaRef, typedText, appendChars, handleBackspace, isCompleted } = engine;
+  const { textareaRef, typedText, appendChars, handleBackspace, composeChars, isCompleted } = engine;
 
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return undefined;
 
     return attachTypingKeyHandlers(ta, {
-      language, isCompleted, appendChars, handleBackspace,
+      language, isCompleted, appendChars, handleBackspace, composeChars,
       allowClipboard: true,
       onPaste, onUndo, onRedo, onSelectAll, onCopy,
     });
-  }, [language, isCompleted, appendChars, handleBackspace, textareaRef, onPaste, onUndo, onRedo, onSelectAll, onCopy]);
+  }, [language, isCompleted, appendChars, handleBackspace, composeChars, textareaRef, onPaste, onUndo, onRedo, onSelectAll, onCopy]);
 
   // Keep focus on the invisible capture textarea so keys are always caught.
   useEffect(() => {

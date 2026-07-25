@@ -8,6 +8,7 @@ import {
 import { requireAuth } from "../lib/auth";
 import { requireActiveAccess } from "../lib/roles";
 import { getOwnAccountAccess } from "../lib/account-status";
+import { canReadUserData } from "../lib/ownership";
 
 const router = Router();
 
@@ -44,6 +45,10 @@ router.get("/typing-sessions/stats", requireAuth, requireActiveAccess(getOwnAcco
   }
 
   const userId = params.data.userId ?? req.user!.userId;
+  if (!(await canReadUserData(req, userId))) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   const conditions: SQL[] = [eq(typingSessionsTable.userId, userId), eq(typingSessionsTable.status, "completed")];
   if (params.data.language) conditions.push(eq(typingSessionsTable.language, params.data.language));
 
@@ -84,6 +89,11 @@ router.get("/typing-sessions", requireAuth, requireActiveAccess(getOwnAccountAcc
 
   const { userId, language, page = 1, limit = 20 } = params.data;
   const targetUserId = userId ?? req.user!.userId;
+  // Prevents enumerating another student's practice history via the userId filter.
+  if (!(await canReadUserData(req, targetUserId))) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   const conditions: SQL[] = [eq(typingSessionsTable.userId, targetUserId)];
   if (language) conditions.push(eq(typingSessionsTable.language, language));
 
@@ -132,6 +142,13 @@ router.get("/typing-sessions/:id", requireAuth, requireActiveAccess(getOwnAccoun
   const [session] = await db.select().from(typingSessionsTable).where(eq(typingSessionsTable.id, id));
   if (!session) {
     res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  // The PATCH handler below already enforces ownership; the GET did not, so a session id was
+  // enough to read someone else's practice session (including their typed text).
+  if (!(await canReadUserData(req, session.userId))) {
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
 
