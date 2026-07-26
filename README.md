@@ -11,7 +11,7 @@ This is a pnpm workspace monorepo:
 ```
 .
 ├── artifacts/
-│   ├── gcc-tbc/        # React + Vite frontend (student/teacher/admin web app)
+│   ├── web/        # React + Vite frontend (student/teacher/admin web app)
 │   ├── api-server/     # Express API server (Node.js)
 │   └── mockup-sandbox/ # Internal design/mockup sandbox (not deployed)
 ├── lib/
@@ -29,7 +29,7 @@ This is a pnpm workspace monorepo:
 
 - **Database:** Neon (serverless PostgreSQL) via Drizzle ORM (`lib/db`)
 - **API:** Express (`artifacts/api-server`), deployable to **Render**
-- **Frontend:** React 19 + Vite 7 + Tailwind v4 (`artifacts/gcc-tbc`), deployable to **Vercel** (or Render static)
+- **Frontend:** React 19 + Vite 7 + Tailwind v4 (`artifacts/web`), deployable to **Vercel** (or Render static)
 - **Package manager:** pnpm (required — see `preinstall` guard in `package.json`)
 
 ## Getting started
@@ -66,17 +66,17 @@ The frontend runs at `http://localhost:5173` by default; the API at
   grading) that reuses the *exact same* keyboard engine as exams/practice.
   Supports English/Marathi/Hindi, live character/word/speed counters, copy,
   paste, undo/redo, clear, and local save. See
-  `artifacts/gcc-tbc/src/pages/notepad.tsx`.
+  `artifacts/web/src/pages/notepad.tsx`.
 - **Curriculum, certificates, institute/admin dashboards, bulk import,
-  keystroke replay & heatmaps** — see `artifacts/gcc-tbc/src/pages`.
+  keystroke replay & heatmaps** — see `artifacts/web/src/pages`.
 
 ### The ISM Remington keyboard engine
 
 The single source of truth for physical-key → Devanagari Unicode mapping is
-`artifacts/gcc-tbc/src/lib/ism-remington-map.ts`. Key-press handling
+`artifacts/web/src/lib/ism-remington-map.ts`. Key-press handling
 (pre-consonant ि buffering, conjuncts via virama, backspace, space, IME
 composition events for English) lives in one shared module,
-`artifacts/gcc-tbc/src/lib/typing-key-handler.ts`, used by **both** the exam
+`artifacts/web/src/lib/typing-key-handler.ts`, used by **both** the exam
 engine (`typing-area.tsx`) and the Notepad (`notepad-typing-area.tsx`) — so
 there is only ever one implementation to maintain.
 
@@ -110,7 +110,7 @@ commands.
 
 ### Vercel (frontend)
 
-`vercel.json` builds `artifacts/gcc-tbc` as a static SPA. Set
+`vercel.json` builds `artifacts/web` as a static SPA. Set
 `VITE_API_BASE_URL` to your deployed Render API URL in the Vercel project's
 environment variables, then import the repo into Vercel — no further
 configuration is required.

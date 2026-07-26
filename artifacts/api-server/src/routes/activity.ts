@@ -4,6 +4,7 @@ import { db, auditLogsTable, loginLogsTable } from "@workspace/db";
 import { ListAuditLogsQueryParams, ListLoginLogsQueryParams } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth";
 import { requireOwner } from "../lib/roles";
+import { normalizeBoolQueryParams } from "../lib/query-params";
 
 const router = Router();
 
@@ -54,7 +55,7 @@ router.get("/audit-logs", requireAuth, requireOwner, async (req, res): Promise<v
 });
 
 router.get("/login-logs", requireAuth, requireOwner, async (req, res): Promise<void> => {
-  const params = ListLoginLogsQueryParams.safeParse(req.query);
+  const params = ListLoginLogsQueryParams.safeParse(normalizeBoolQueryParams(req.query, ["success"]));
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;

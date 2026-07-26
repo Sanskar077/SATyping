@@ -1,8 +1,15 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "dist",
-    "rootDir": "src",
+    "noEmit": true,
+    // fetch-passages.ts imports the keyboard map from artifacts/web so the passage validator
+    // uses the SAME character data as the typing engine, never a second copy (see CLAUDE.md).
+    // These scripts run under tsx and are never compiled to dist, so there is no rootDir/outDir
+    // to preserve; the wider rootDir exists purely so `tsc --noEmit` can follow that import.
+    "rootDir": "..",
+    // That map types one helper against the DOM KeyboardEvent. Including the DOM lib is
+    // typecheck-only — nothing in this package touches the DOM at runtime.
+    "lib": ["ES2022", "DOM"],
     "types": ["node"]
   },
   "include": ["src"]

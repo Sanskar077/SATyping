@@ -1,20 +1,63 @@
 import { config } from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 
 // pnpm runs this script with CWD = scripts/, so dotenv's default `.env` lookup finds nothing.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 config({ path: path.resolve(__dirname, "..", "..", ".env") });
 
 import { db, usersTable, institutesTable, batchesTable, passagesTable, subscriptionsTable, plansTable } from "@workspace/db";
+import { sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
-async function seed() {
-  console.log("Seeding database...");
+/**
+ * The typing corpus is generated offline by `fetch-passages.ts` (fetch → clean → split from
+ * public-domain / CC BY-SA sources) and committed as JSON. Seeding just imports it, so the run
+ * needs no network access and the exact text in the DB is reviewable in version control.
+ *
+ * Read at runtime rather than `import ... assert { type: "json" }` so typecheck doesn't have to
+ * inline the whole file (and so we don't need resolveJsonModule across the workspace).
+ */
+interface GeneratedPassage {
+  title: string;
+  content: string;
+  language: "english" | "marathi";
+  difficulty: "easy" | "medium" | "hard";
+  speedCategory: number;
+  wordCount: number;
+  source: string;
+}
 
+function loadGeneratedCorpus(): GeneratedPassage[] {
+  const file = path.resolve(__dirname, "data", "passages.generated.json");
+  try {
+    return JSON.parse(readFileSync(file, "utf8")) as GeneratedPassage[];
+  } catch (err) {
+    throw new Error(
+      `Could not read the generated passage corpus at ${file}. ` +
+        `Run \`pnpm --filter @workspace/scripts run fetch-passages\` first. (${(err as Error).message})`,
+    );
+  }
+}
+
+/**
+ * Demo accounts (admin/teacher/student + a demo institute) are OPT-IN.
+ *
+ * They exist to make a fresh local install usable immediately, but they must never be created on
+ * a production database: `admin@satyping.local` is a second super_admin with a published password, and
+ * the platform is designed around exactly one Owner account. Running this straight after
+ * `reset-db` would therefore silently undo the "exactly one super_admin" guarantee.
+ *
+ * Enable explicitly for local development:
+ *   SEED_DEMO_ACCOUNTS=yes pnpm --filter @workspace/scripts run seed
+ */
+const SEED_DEMO_ACCOUNTS = process.env.SEED_DEMO_ACCOUNTS === "yes";
+
+async function seedDemoAccounts() {
   // Create super admin
   const [superAdmin] = await db.insert(usersTable).values({
-    email: "admin@gcctbc.com",
+    email: "admin@satyping.local",
     passwordHash: await bcrypt.hash("Admin@1234", 10),
     name: "Super Admin",
     role: "super_admin",
@@ -30,16 +73,16 @@ async function seed() {
       status: "active",
       startedAt: new Date(),
     }).onConflictDoNothing();
-    console.log("Created super admin: admin@gcctbc.com / Admin@1234");
+    console.log("Created super admin: admin@satyping.local / Admin@1234");
   }
 
   // Create a demo institute — Premium-granted (not a real payment) so the seeded teacher/student
   // aren't locked out under the no-trial access model (they inherit access from the institute).
   const [institute] = await db.insert(institutesTable).values({
-    name: "GCC Typing Academy",
+    name: "SATyping Demo Academy",
     address: "Mumbai, Maharashtra",
     phone: "+91-9876543210",
-    email: "info@gcctyping.com",
+    email: "demo@satyping.local",
     subscriptionPlan: "institute",
     accountStatus: "active",
     premiumGrantedByOwner: true,
@@ -51,12 +94,12 @@ async function seed() {
     const [existing] = await db.select().from(institutesTable);
     instituteId = existing?.id;
   } else {
-    console.log("Created institute: GCC Typing Academy");
+    console.log("Created institute: SATyping Demo Academy");
   }
 
   // Create a teacher
   const [teacher] = await db.insert(usersTable).values({
-    email: "teacher@gcctbc.com",
+    email: "teacher@satyping.local",
     passwordHash: await bcrypt.hash("Teacher@1234", 10),
     name: "Ramesh Kumar",
     role: "teacher",
@@ -71,12 +114,12 @@ async function seed() {
       plan: "pro_student",
       status: "active",
     }).onConflictDoNothing();
-    console.log("Created teacher: teacher@gcctbc.com / Teacher@1234");
+    console.log("Created teacher: teacher@satyping.local / Teacher@1234");
   }
 
   // Create a student
   const [student] = await db.insert(usersTable).values({
-    email: "student@gcctbc.com",
+    email: "student@satyping.local",
     passwordHash: await bcrypt.hash("Student@1234", 10),
     name: "Priya Sharma",
     role: "student",
@@ -91,7 +134,7 @@ async function seed() {
       plan: "pro_student",
       status: "active",
     }).onConflictDoNothing();
-    console.log("Created student: student@gcctbc.com / Student@1234");
+    console.log("Created student: student@satyping.local / Student@1234");
   }
 
   // Create a batch
@@ -102,6 +145,19 @@ async function seed() {
       description: "Morning batch for 30 WPM students",
     }).onConflictDoNothing();
     console.log("Created batch: Batch A - Morning");
+  }
+}
+
+async function seed() {
+  console.log("Seeding database...");
+
+  if (SEED_DEMO_ACCOUNTS) {
+    console.log("SEED_DEMO_ACCOUNTS=yes — creating demo accounts (local development only).");
+    await seedDemoAccounts();
+  } else {
+    console.log(
+      "Skipping demo accounts (set SEED_DEMO_ACCOUNTS=yes to create them for local development).",
+    );
   }
 
   // Sample plans — /plans is empty until at least one exists; these give a fresh install
@@ -146,91 +202,52 @@ async function seed() {
     console.log(`Seeded ${plans.length} plans`);
   }
 
-  // English passages
-  const englishPassages = [
-    {
-      title: "The Art of Typing",
-      content: "Typing is a skill that has become essential in today's digital world. The ability to type quickly and accurately can significantly improve your productivity and open up many career opportunities. Whether you are a student, a professional, or simply someone who spends time on a computer, learning to type well is a valuable investment. Practice regularly and focus on accuracy before speed, as good habits formed early will serve you throughout your life.",
-      language: "english",
-      difficulty: "easy",
-      speedCategory: 30,
-    },
-    {
-      title: "The Importance of Digital Skills",
-      content: "In the modern era of technology and digital transformation, possessing strong digital skills is no longer optional but a necessity for every individual seeking professional growth. From basic computer literacy to advanced programming knowledge, the spectrum of digital competencies that employers seek has expanded dramatically. Typing proficiency remains one of the foundational digital skills that enables efficient communication and data processing across all industries.",
-      language: "english",
-      difficulty: "medium",
-      speedCategory: 40,
-    },
-    {
-      title: "Benefits of Regular Typing Practice",
-      content: "Regular typing practice offers numerous benefits beyond just improving speed. It enhances your ability to focus and concentrate for extended periods, reduces the cognitive load of thinking about key positions, and allows your thoughts to flow more naturally onto the screen. Professional typists report that fluent typing helps them think more clearly while writing, as the mechanical aspect becomes automatic and no longer interrupts their thought processes or creative flow.",
-      language: "english",
-      difficulty: "medium",
-      speedCategory: 50,
-    },
-    {
-      title: "Advanced Typing Techniques",
-      content: "Advanced typing techniques encompass not just finger placement and speed but also ergonomics and sustainability of practice. Proper posture, appropriate keyboard height, and regular breaks are essential components of professional typing. The touch typing method, where typists rely on muscle memory rather than visual confirmation of key positions, represents the pinnacle of typing efficiency. Mastering this technique requires dedicated practice but yields remarkable improvements in both speed and accuracy.",
-      language: "english",
-      difficulty: "hard",
-      speedCategory: 60,
-    },
-  ];
+  // Typing passages — the committed corpus generated offline by fetch-passages.ts.
+  // The passages table has no natural unique key, so onConflictDoNothing can't dedupe; a naive
+  // re-run would double the row count. Seed deterministically instead: only populate when the
+  // table is empty, so a fresh install lands exactly the generated corpus (50 English + 50
+  // Marathi) and a re-run is a no-op. Use reset-db to wipe and re-seed from scratch.
+  const corpus = loadGeneratedCorpus();
 
-  // Hindi passages (using Devanagari script)
-  const hindiPassages = [
-    {
-      title: "टाइपिंग का महत्व",
-      content: "आज के डिजिटल युग में टाइपिंग एक अत्यंत महत्वपूर्ण कौशल बन गई है। कंप्यूटर पर तेज और सटीक टाइप करने की क्षमता आपकी कार्यक्षमता को काफी बढ़ा सकती है। हिंदी टाइपिंग सीखने से आप सरकारी नौकरियों के लिए बेहतर तैयारी कर सकते हैं। नियमित अभ्यास से आप अपनी गति और शुद्धता दोनों में सुधार कर सकते हैं।",
-      language: "hindi",
-      difficulty: "easy",
-      speedCategory: 30,
-    },
-    {
-      title: "भारत की संस्कृति",
-      content: "भारत एक विविधताओं से भरा देश है जहाँ अनेक भाषाएँ, धर्म और संस्कृतियाँ एक साथ फलती-फूलती हैं। यहाँ की समृद्ध सांस्कृतिक विरासत हजारों वर्षों पुरानी है। भारत के विभिन्न राज्यों में अलग-अलग परंपराएँ, त्योहार और खान-पान की विशेषताएँ पाई जाती हैं। यह विविधता ही भारत को एक अनूठा और विशेष राष्ट्र बनाती है।",
-      language: "hindi",
-      difficulty: "medium",
-      speedCategory: 40,
-    },
-  ];
-
-  // Marathi passages
-  const marathiPassages = [
-    {
-      title: "महाराष्ट्राची ओळख",
-      content: "महाराष्ट्र हे भारताच्या पश्चिम भागातील एक प्रमुख राज्य आहे. येथील समृद्ध सांस्कृतिक परंपरा, छत्रपती शिवाजी महाराजांचा इतिहास आणि वारी परंपरा जगभर प्रसिद्ध आहे. मराठी भाषा ही महाराष्ट्राची राज्य भाषा असून ती अत्यंत समृद्ध आणि प्राचीन आहे. टाइपिंग या भाषेत शिकणे सरकारी नोकऱ्यांसाठी उपयुक्त ठरते.",
-      language: "marathi",
-      difficulty: "easy",
-      speedCategory: 30,
-    },
-    {
-      title: "मराठी साहित्याची परंपरा",
-      content: "मराठी साहित्याची परंपरा अनेक शतके जुनी आहे. संत ज्ञानेश्वर, संत तुकाराम, संत एकनाथ यांनी मराठी साहित्याला एक उच्च स्थान प्राप्त करून दिले. आधुनिक काळात मराठी साहित्यात विपुल रचना होत आहेत. मराठी कादंबऱ्या, कविता आणि नाटके देश-विदेशात प्रसिद्ध आहेत. या समृद्ध परंपरेचे जतन करणे आपले कर्तव्य आहे.",
-      language: "marathi",
-      difficulty: "medium",
-      speedCategory: 40,
-    },
-  ];
-
-  const allPassages = [...englishPassages, ...hindiPassages, ...marathiPassages];
-
-  for (const p of allPassages) {
-    const wordCount = p.content.trim().split(/\s+/).filter(Boolean).length;
-    await db.insert(passagesTable).values({
-      ...p,
-      wordCount,
-      isActive: true,
-    }).onConflictDoNothing();
+  const enCount = corpus.filter((p) => p.language === "english").length;
+  const mrCount = corpus.filter((p) => p.language === "marathi").length;
+  if (enCount !== 50 || mrCount !== 50) {
+    throw new Error(
+      `Generated corpus is not the expected 50 English + 50 Marathi (got ${enCount} + ${mrCount}). ` +
+        `Re-run \`pnpm --filter @workspace/scripts run fetch-passages\`.`,
+    );
   }
-  console.log(`Seeded ${allPassages.length} passages`);
+
+  const [existingPassage] = await db.select({ id: passagesTable.id }).from(passagesTable).limit(1);
+  if (existingPassage) {
+    const [{ count: total } = { count: 0 }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(passagesTable);
+    console.log(`Passages already seeded (${total} rows), skipping. Use reset-db to re-seed.`);
+  } else {
+    // Insert in chunks — a single 100-row multi-values insert is fine, but chunking keeps the
+    // statement well under any parameter limit if the corpus grows.
+    for (const p of corpus) {
+      await db.insert(passagesTable).values({
+        title: p.title,
+        content: p.content,
+        language: p.language,
+        difficulty: p.difficulty,
+        speedCategory: p.speedCategory,
+        wordCount: p.wordCount,
+        isActive: true,
+      });
+    }
+    console.log(`Seeded ${corpus.length} passages (${enCount} English + ${mrCount} Marathi)`);
+  }
 
   console.log("\n✅ Seeding complete!");
-  console.log("\nDemo accounts:");
-  console.log("  admin@gcctbc.com    / Admin@1234    (Super Admin)");
-  console.log("  teacher@gcctbc.com  / Teacher@1234  (Teacher)");
-  console.log("  student@gcctbc.com  / Student@1234  (Student)");
+  if (SEED_DEMO_ACCOUNTS) {
+    console.log("\nDemo accounts:");
+    console.log("  admin@satyping.local    / Admin@1234    (Super Admin)");
+    console.log("  teacher@satyping.local  / Teacher@1234  (Teacher)");
+    console.log("  student@satyping.local  / Student@1234  (Student)");
+  }
 
   process.exit(0);
 }

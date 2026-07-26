@@ -1,55 +1,87 @@
 ##############################################################################
-# render.yaml — Render Blueprint for SATyping
+# render.yaml — Render Blueprint for the SATyping API server
 #
-# Two services are declared:
-#   1. satyping-api   — Express API server (Web Service, Node 22)
-#   2. satyping-web   — React frontend    (Static Site, built with Vite)
+# Architecture (see CLAUDE.md / deployment docs):
+#   • Backend  (this file) → Render Web Service (Express API)
+#   • Frontend             → Vercel (see vercel.json) — NOT built here
+#   • Database             → Neon PostgreSQL (external, via DATABASE_URL)
 #
-# Environment variables marked `sync: false` must be set manually in the
-# Render dashboard (they contain secrets that should not live in source).
+# Only the API is deployed on Render. The frontend is a separate Vercel project,
+# so it is intentionally absent from this blueprint — deploying it in two places
+# would just create drift.
+#
+# Environment variables marked `sync: false` are secrets/URLs that must be set
+# manually in the Render dashboard (Dashboard → the service → Environment). They
+# are listed here so the blueprint documents exactly what the service needs.
 ##############################################################################
 
 services:
-  # --------------------------------------------------------------------------
-  # API Server
-  # --------------------------------------------------------------------------
   - type: web
     name: satyping-api
     runtime: node
     region: oregon
     plan: free
 
-    # Render runs these from the repo root
+    # Build context is the repository root (Render clones the whole repo).
+    #
+    # `--frozen-lockfile` makes the install fail if pnpm-lock.yaml is out of date,
+    # so a forgotten lockfile update is caught in CI rather than silently resolving
+    # to different versions in production.
+    #
+    # The `...` suffix on the filter also builds the api-server's workspace
+    # dependencies (@workspace/db, @workspace/api-zod). Those are consumed as
+    # TypeScript source and inlined by esbuild, so they have no build step of their
+    # own today — but the suffix keeps the command correct if that ever changes.
     buildCommand: >
-      npm install -g pnpm &&
-      pnpm install --no-frozen-lockfile &&
-      pnpm --filter @workspace/api-server run build
+      corepack enable &&
+      pnpm install --frozen-lockfile &&
+      pnpm --filter @workspace/api-server... run build
 
-    startCommand: node artifacts/api-server/dist/index.mjs
+    # esbuild produces a single self-contained bundle at dist/index.mjs; the start
+    # script runs exactly that. Uses the package script (not a hardcoded node path)
+    # so the entrypoint stays defined in one place.
+    startCommand: pnpm --filter @workspace/api-server run start
 
-    healthCheckPath: /api/healthz
+    # Health check — Render polls this to decide the service is live. Deliberately
+    # DB-free and unauthenticated, so a transient database blip doesn't cause Render
+    # to kill an otherwise-healthy process. Both /api/health and /api/healthz work.
+    healthCheckPath: /api/health
 
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 10000            # Render assigns this automatically; keep in sync
+
+      # PORT: Render injects this automatically and the server reads process.env.PORT
+      # (index.ts). Do NOT hardcode it — pinning a value here can conflict with the
+      # port Render actually routes traffic to.
+
       - key: DATABASE_URL
-        sync: false             # Set in Render dashboard → Environment
+        sync: false             # Neon pooled connection string; must include sslmode=require
       - key: SESSION_SECRET
-        sync: false             # Set in Render dashboard → Environment
+        sync: false             # openssl rand -base64 48
+
+      # CORS_ORIGIN is REQUIRED in production — the server refuses to boot without it
+      # (app.ts), to avoid ever running an allow-all CORS policy. Set it to the
+      # frontend's Vercel origin, e.g. https://your-app.vercel.app
       - key: CORS_ORIGIN
-        sync: false             # e.g. https://your-app.vercel.app
+        sync: false
+      # FRONTEND_URL builds the links inside verification/reset emails — must point at
+      # the Vercel frontend, not this API, or the links 404.
       - key: FRONTEND_URL
-        sync: false             # e.g. https://your-app.vercel.app — used to build email links
-      # Razorpay (payments) — from Razorpay Dashboard → Settings → API Keys / Webhooks
+        sync: false
+
+      # Razorpay — Dashboard → Account & Settings → API Keys / Webhooks.
+      # rzp_test_* keys = sandbox; rzp_live_* = real charges. No code change to switch.
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
         sync: false
       - key: RAZORPAY_WEBHOOK_SECRET
-        sync: false
-      # Email (verification / password reset) — optional; if unset, emails are logged instead of sent
+        sync: false             # from the webhook you create pointing at /api/payments/webhook
+
+      # Email (verification / password reset). If unset, emails are logged instead of
+      # sent — the app still runs. Note: the provider must allow this service's
+      # outbound IP and have a verified sender (see check-email script / email.ts).
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
@@ -60,33 +92,3 @@ services:
         sync: false
       - key: EMAIL_FROM
         sync: false
-
-  # --------------------------------------------------------------------------
-  # Frontend Static Site
-  # --------------------------------------------------------------------------
-  - type: web
-    name: satyping-web
-    runtime: static
-    region: oregon
-    plan: free
-
-    buildCommand: >
-      npm install -g pnpm &&
-      pnpm install --no-frozen-lockfile &&
-      pnpm --filter @workspace/gcc-tbc run build
-
-    staticPublishPath: artifacts/gcc-tbc/dist/public
-
-    # Rewrite all paths to index.html for client-side routing (SPA)
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: BASE_PATH
-        value: /
-      - key: VITE_API_BASE_URL
-        sync: false             # e.g. https://satyping-api.onrender.com

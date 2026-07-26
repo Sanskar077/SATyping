@@ -6,6 +6,7 @@ import { requireAuth } from "../lib/auth";
 import { requireActiveAccess } from "../lib/roles";
 import { getOwnAccountAccess } from "../lib/account-status";
 import { canReadUserData } from "../lib/ownership";
+import { normalizeBoolQueryParams } from "../lib/query-params";
 
 const router = Router();
 
@@ -187,7 +188,7 @@ router.get("/results/leaderboard", requireAuth, requireActiveAccess(getOwnAccoun
 });
 
 router.get("/results", requireAuth, requireActiveAccess(getOwnAccountAccess), async (req, res): Promise<void> => {
-  const params = ListResultsQueryParams.safeParse(req.query);
+  const params = ListResultsQueryParams.safeParse(normalizeBoolQueryParams(req.query, ["passed"]));
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;

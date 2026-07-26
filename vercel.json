@@ -3,21 +3,27 @@
   "version": 2,
 
   "comment": [
-    "Vercel hosts the React frontend (gcc-tbc) as a static SPA.",
-    "The Express API server should be deployed separately on Render (or Railway,",
-    "Fly.io, etc.) and its URL set as VITE_API_BASE_URL below.",
+    "Vercel hosts the React frontend (artifacts/web) as a static SPA.",
+    "The Express API is deployed separately on Render (see render.yaml); its public",
+    "URL is provided to the build as VITE_API_BASE_URL.",
     "",
-    "Build & output settings are configured here so Vercel picks them up",
-    "automatically without requiring manual dashboard configuration."
+    "IMPORTANT — VITE_API_BASE_URL is a BUILD-TIME variable. Vite inlines it into the",
+    "bundle at build time, so it must be set in the Vercel project's Environment",
+    "Variables BEFORE the build runs. Changing it later requires a redeploy; setting it",
+    "only at runtime has no effect.",
+    "",
+    "Build & output settings live here so Vercel needs no manual dashboard configuration",
+    "beyond the environment variable above. The install/build run from the repo root so",
+    "the pnpm workspace (and the frontend's @workspace/* dependencies) resolve correctly."
   ],
 
-  "buildCommand": "pnpm --filter @workspace/gcc-tbc run build",
-  "outputDirectory": "artifacts/gcc-tbc/dist/public",
-  "installCommand": "npm install -g pnpm && pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm --filter @workspace/web... run build",
+  "outputDirectory": "artifacts/web/dist/public",
+  "installCommand": "corepack enable && pnpm install --frozen-lockfile",
   "framework": null,
 
   "rewrites": [
-    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+    { "source": "/((?!assets/|favicon.svg|robots.txt|opengraph.jpg).*)", "destination": "/index.html" }
   ],
 
   "headers": [

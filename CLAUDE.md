@@ -30,7 +30,7 @@ Copy `.env.example` → `.env` at the repo root before running anything DB- or A
 
 ### Package graph (`artifacts/*`, `lib/*`, `scripts`)
 
-- `artifacts/gcc-tbc` — React 19 + Vite 7 + Tailwind v4 SPA (student/teacher/admin). Routing via `wouter`, server state via `@tanstack/react-query`, UI via Radix + `class-variance-authority`. Deploys to Vercel (`vercel.json`).
+- `artifacts/web` — React 19 + Vite 7 + Tailwind v4 SPA (student/teacher/admin). Routing via `wouter`, server state via `@tanstack/react-query`, UI via Radix + `class-variance-authority`. Deploys to Vercel (`vercel.json`).
 - `artifacts/api-server` — Express 5 API (JWT auth, bcrypt, helmet, rate limiting, pino logging, Razorpay payments, nodemailer). Deploys to Render (`render.yaml`, service `satyping-api`). Bundled for prod via `build.mjs` (esbuild).
 - `artifacts/mockup-sandbox` — internal design sandbox, **not deployed**.
 - `lib/db` — Drizzle ORM schema + Postgres (Neon) client. `@workspace/db` exports the client (`.`) and schema (`./schema`).
@@ -48,8 +48,8 @@ The frontend wires the client at startup via `configureApi()` in `src/lib/api.ts
 
 Two files are the single source of truth and are **shared** by both the exam engine (`typing-area.tsx`) and the Notepad (`notepad-typing-area.tsx`):
 
-- `artifacts/gcc-tbc/src/lib/ism-remington-map.ts` — physical-key → Devanagari Unicode mapping.
-- `artifacts/gcc-tbc/src/lib/typing-key-handler.ts` — key-press handling (pre-consonant ि buffering, conjuncts via virama, backspace, space, English IME composition).
+- `artifacts/web/src/lib/ism-remington-map.ts` — physical-key → Devanagari Unicode mapping.
+- `artifacts/web/src/lib/typing-key-handler.ts` — key-press handling (pre-consonant ि buffering, conjuncts via virama, backspace, space, English IME composition).
 
 Extend these files rather than writing a parallel implementation. Marathi and Hindi intentionally share one Devanagari Remington layout (matches CDAC GIST). Grading always validates the **final committed Unicode text**, never raw key presses.
 

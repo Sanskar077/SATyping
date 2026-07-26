@@ -13,7 +13,7 @@ const router = Router();
 function generateCertNumber(): string {
   const year = new Date().getFullYear();
   const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
-  return `GCC-TBC-${year}-${rand}`;
+  return `SAT-${year}-${rand}`;
 }
 
 async function formatCertificate(c: typeof certificatesTable.$inferSelect) {

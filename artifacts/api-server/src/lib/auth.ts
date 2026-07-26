@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import type { Request, Response, NextFunction } from "express";
 
-const JWT_SECRET = process.env.SESSION_SECRET ?? "gcc-tbc-dev-secret-key-change-in-production";
+const JWT_SECRET = process.env.SESSION_SECRET ?? "satyping-dev-secret-key-change-in-production";
 const ACCESS_TOKEN_EXPIRY = "15m";
 const REFRESH_TOKEN_EXPIRY = "30d";
 

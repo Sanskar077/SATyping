@@ -4,7 +4,7 @@ import {
   db, paymentsTable, invoicesTable, plansTable, offersTable, subscriptionsTable,
   usersTable, institutesTable, commissionsTable,
 } from "@workspace/db";
-import { CreateCheckoutBody, ListMyPaymentsQueryParams, ListPaymentsQueryParams, RefundPaymentParams } from "@workspace/api-zod";
+import { CreateCheckoutBody, ListMyPaymentsQueryParams, ListPaymentsQueryParams, RefundPaymentParams, VerifyPaymentBody } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth";
 import { requirePermission, PERMISSIONS } from "../lib/permissions";
 import { razorpayGateway, verifyRazorpayWebhookSignature } from "../lib/payments/razorpay";
@@ -114,40 +114,29 @@ router.post("/payments/checkout", requireAuth, async (req, res): Promise<void> =
   }
 });
 
-// Razorpay webhook receiver — verified by HMAC signature over the raw body, NOT by requireAuth
-// (Razorpay's servers call this directly, they can't hold a user session token).
-router.post("/payments/webhook", async (req, res): Promise<void> => {
-  const signature = req.headers["x-razorpay-signature"];
-  const rawBody = (req as typeof req & { rawBody?: Buffer }).rawBody;
-
-  if (typeof signature !== "string" || !rawBody || !verifyRazorpayWebhookSignature(rawBody.toString("utf-8"), signature)) {
-    res.status(400).json({ error: "Invalid webhook signature" });
-    return;
-  }
-
-  const body = req.body as {
-    event?: string;
-    payload?: { payment?: { entity?: { id?: string; order_id?: string } } };
-  };
-
-  const isSuccessEvent = body.event === "payment.captured" || body.event === "order.paid";
-  const orderId = body.payload?.payment?.entity?.order_id;
-  const gatewayPaymentId = body.payload?.payment?.entity?.id;
-
-  if (!isSuccessEvent || !orderId || !gatewayPaymentId) {
-    // Not an event we act on (e.g. payment.failed) — acknowledge so Razorpay doesn't retry.
-    res.sendStatus(200);
-    return;
-  }
-
-  const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.gatewayOrderId, orderId));
-  if (!payment || payment.status === "success") {
-    // Unknown order, or already processed — idempotent no-op, still acknowledge.
-    res.sendStatus(200);
-    return;
-  }
+/**
+ * Marks a payment successful and activates everything that follows from it: invoice, subscription,
+ * account access, offer redemption, referral commission, notification.
+ *
+ * Shared by BOTH activation paths — the Razorpay webhook and the client-side verify endpoint —
+ * so a payment activates identically no matter which arrives first. Idempotent: if the payment is
+ * already "success" it returns false and changes nothing, which is what makes it safe to run twice
+ * (the webhook and the browser callback routinely race each other).
+ */
+async function activatePayment(
+  payment: typeof paymentsTable.$inferSelect,
+  gatewayPaymentId: string,
+  signature: string,
+): Promise<boolean> {
+  if (payment.status === "success") return false;
 
   await db.transaction(async (tx) => {
+    // Re-read inside the transaction and bail if another path won the race. Without this, the
+    // webhook and the verify endpoint firing simultaneously could both pass the check above and
+    // each insert an invoice / credit a commission twice.
+    const [fresh] = await tx.select().from(paymentsTable).where(eq(paymentsTable.id, payment.id)).for("update");
+    if (!fresh || fresh.status === "success") return;
+
     await tx.update(paymentsTable).set({
       status: "success",
       gatewayPaymentId,
@@ -250,6 +239,94 @@ router.post("/payments/webhook", async (req, res): Promise<void> => {
     );
   }
 
+  return true;
+}
+
+/**
+ * Client-side payment verification — the SECOND activation path, and the one that makes local /
+ * sandbox testing possible at all.
+ *
+ * Razorpay's checkout hands the browser back an order_id + payment_id + signature. Posting them
+ * here lets the server verify the HMAC (using RAZORPAY_KEY_SECRET, the `order_id|payment_id`
+ * scheme) and activate immediately, without waiting for the webhook.
+ *
+ * Why this is required rather than a nicety: the webhook is an inbound call from Razorpay's
+ * servers, so it can never reach a machine running on localhost. Before this endpoint existed the
+ * chain simply stopped after checkout in any non-public environment — payments stayed "pending"
+ * forever and no subscription ever activated. It also protects production against webhook delivery
+ * delays or outages.
+ *
+ * This is NOT a trust-the-client shortcut: the signature is cryptographic proof from Razorpay, and
+ * the amount/plan are read from OUR payment row, never from the request body.
+ */
+router.post("/payments/verify", requireAuth, async (req, res): Promise<void> => {
+  const parsed = VerifyPaymentBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = parsed.data;
+
+  if (!razorpayGateway.verifySignature(razorpayOrderId, razorpayPaymentId, razorpaySignature)) {
+    res.status(400).json({ error: "Payment signature verification failed", code: "INVALID_SIGNATURE" });
+    return;
+  }
+
+  const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.gatewayOrderId, razorpayOrderId));
+  if (!payment) {
+    res.status(404).json({ error: "Payment not found" });
+    return;
+  }
+
+  // A valid signature proves Razorpay processed the payment, but not WHO is asking — scope the
+  // activation to the payment's own owner so one user can't activate another's order.
+  if (payment.userId !== req.user!.userId) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const activated = await activatePayment(payment, razorpayPaymentId, razorpaySignature);
+  res.json({
+    status: "success",
+    // false means the webhook already activated it — still a success from the caller's view.
+    alreadyProcessed: !activated,
+  });
+});
+
+// Razorpay webhook receiver — verified by HMAC signature over the raw body, NOT by requireAuth
+// (Razorpay's servers call this directly, they can't hold a user session token).
+router.post("/payments/webhook", async (req, res): Promise<void> => {
+  const signature = req.headers["x-razorpay-signature"];
+  const rawBody = (req as typeof req & { rawBody?: Buffer }).rawBody;
+
+  if (typeof signature !== "string" || !rawBody || !verifyRazorpayWebhookSignature(rawBody.toString("utf-8"), signature)) {
+    res.status(400).json({ error: "Invalid webhook signature" });
+    return;
+  }
+
+  const body = req.body as {
+    event?: string;
+    payload?: { payment?: { entity?: { id?: string; order_id?: string } } };
+  };
+
+  const isSuccessEvent = body.event === "payment.captured" || body.event === "order.paid";
+  const orderId = body.payload?.payment?.entity?.order_id;
+  const gatewayPaymentId = body.payload?.payment?.entity?.id;
+
+  if (!isSuccessEvent || !orderId || !gatewayPaymentId) {
+    // Not an event we act on (e.g. payment.failed) — acknowledge so Razorpay doesn't retry.
+    res.sendStatus(200);
+    return;
+  }
+
+  const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.gatewayOrderId, orderId));
+  if (!payment) {
+    // Unknown order — idempotent no-op, still acknowledge so Razorpay stops retrying.
+    res.sendStatus(200);
+    return;
+  }
+
+  await activatePayment(payment, gatewayPaymentId, signature);
   res.sendStatus(200);
 });
 

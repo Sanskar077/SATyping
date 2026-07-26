@@ -1,85 +1,50 @@
-# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+# SATyping — .gitignore
+# Tailored to this pnpm monorepo: Vite/React frontend (artifacts/web),
+# Express API (artifacts/api-server), Drizzle/Neon (lib/db), Vercel + Render deploys.
 
-# ── Environment secrets — never commit these ────────────────────────────────
+# ── Secrets — never commit ───────────────────────────────────────────────────
 .env
 .env.local
 .env.*.local
-process/.env
 !.env.example
 
 # ── Dependencies ─────────────────────────────────────────────────────────────
 node_modules/
-**/node_modules/
 .pnpm-store/
 
-# ── Build outputs (all workspace packages: artifacts/*, lib/*, scripts) ─────
+# ── Build outputs ────────────────────────────────────────────────────────────
 dist/
-**/dist/
-build/
-**/build/
-out-tsc/
-.next/
-**/.next/
-.turbo/
-**/.turbo/
-.vercel
-tmp/
 *.tsbuildinfo
-.expo
-.expo-shared
+.vercel
+# Tauri (desktop app) — Rust build cache is multi-GB
+src-tauri/target/
+src-tauri/gen/
 
-# ── Test / coverage ──────────────────────────────────────────────────────────
-/coverage
-**/coverage/
+# ── Test & coverage ──────────────────────────────────────────────────────────
+coverage/
 *.lcov
-test-results/
-playwright-report/
 
 # ── Logs & temp files ────────────────────────────────────────────────────────
-npm-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-testem.log
 *.log
 *.tmp
-*.temp
 *.bak
 *.orig
+tmp/
 
-# ── IDEs and editors ─────────────────────────────────────────────────────────
-/.idea
-.project
-.classpath
-.c9/
-*.launch
-.settings/
-*.sublime-workspace
+# ── Tooling state (local-only assistant/session files) ───────────────────────
+.claude/settings.local.json
+.hallmark/
 
-# IDE - VSCode
+# ── Editors & IDEs ───────────────────────────────────────────────────────────
+.idea/
 .vscode/*
 !.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
 !.vscode/extensions.json
 
-# ── Misc build caches ────────────────────────────────────────────────────────
-/.sass-cache
-/connect.lock
-/libpeerconnection.log
-/typings
-.cache/
-**/.cache/
-.local/
-
-# ── System files ─────────────────────────────────────────────────────────────
+# ── OS junk ──────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# ── Replit / platform artifacts (not part of the deployable app) ────────────
-.cursor/rules/nx-rules.mdc
-.github/instructions/nx.instructions.md
-**/.replit-artifact/
-
-# ── Packaging output (this project's own release zips) ──────────────────────
+# ── Release archives ─────────────────────────────────────────────────────────
 *.zip

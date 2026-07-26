@@ -4,6 +4,7 @@ import { db, plansTable, subscriptionsTable } from "@workspace/db";
 import { ListPlansQueryParams, CreatePlanBody, GetPlanParams, UpdatePlanParams, UpdatePlanBody, DeletePlanParams } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth";
 import { requireOwner } from "../lib/roles";
+import { normalizeBoolQueryParams } from "../lib/query-params";
 import { logAudit } from "../lib/audit";
 
 const router = Router();
@@ -25,7 +26,9 @@ function formatPlan(p: typeof plansTable.$inferSelect) {
 
 // Public: list active plans, optionally filtered by audience (student vs institute).
 router.get("/plans", async (req, res): Promise<void> => {
-  const params = ListPlansQueryParams.safeParse(req.query);
+  // forInstitute arrives as the string "true"/"false"; normalise before validation so
+  // ?forInstitute=false is not misread as true (see lib/query-params.ts).
+  const params = ListPlansQueryParams.safeParse(normalizeBoolQueryParams(req.query, ["forInstitute"]));
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;

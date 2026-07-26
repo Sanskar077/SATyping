@@ -10,9 +10,24 @@ const app: Express = express();
 
 // Allow explicit origin list via CORS_ORIGIN env, or permit all in dev.
 // Example: CORS_ORIGIN=https://your-frontend.vercel.app,https://www.yoursite.com
-const corsOrigin = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim())
-  : true;
+//
+// An unset/empty CORS_ORIGIN reflects whatever Origin the caller sends. That is convenient
+// locally but must never happen in production, where it would let any site call the API with a
+// user's credentials. In production we therefore fail loudly at boot rather than starting up in a
+// silently insecure state.
+const corsOriginList = (process.env.CORS_ORIGIN ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+if (process.env.NODE_ENV === "production" && corsOriginList.length === 0) {
+  throw new Error(
+    "CORS_ORIGIN must be set in production (comma-separated origins, e.g. https://your-app.vercel.app). " +
+      "Refusing to start with an allow-all CORS policy.",
+  );
+}
+
+const corsOrigin = corsOriginList.length > 0 ? corsOriginList : true;
 
 app.use(
   pinoHttp({

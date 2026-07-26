@@ -68,8 +68,13 @@ export default defineConfig({
       override: {
         zod: {
           coerce: {
-            query: ['boolean', 'number', 'string'],
-            param: ['boolean', 'number', 'string'],
+            // NOTE: 'boolean' is deliberately EXCLUDED from query/param coercion. Zod's
+            // z.coerce.boolean() is just Boolean(value), so the string "false" (which is how a
+            // boolean arrives in a query string) coerces to TRUE — silently inverting every
+            // ?flag=false filter. Booleans are handled explicitly at the route layer via
+            // parseBoolQueryParam() in api-server. Numbers/strings coerce fine and stay here.
+            query: ['number', 'string'],
+            param: ['number', 'string'],
             body: ['bigint', 'date'],
             response: ['bigint', 'date'],
           },

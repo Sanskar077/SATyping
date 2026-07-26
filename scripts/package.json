@@ -4,8 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "hello": "tsx ./src/hello.ts",
     "seed": "tsx ./src/seed.ts",
+    "reset-db": "tsx ./src/reset-db.ts",
+    "fetch-passages": "tsx ./src/fetch-passages.ts",
     "create-owner": "tsx ./src/create-owner.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

@@ -3,6 +3,7 @@ import { eq, and, SQL, count } from "drizzle-orm";
 import { db, notificationsTable } from "@workspace/db";
 import { ListMyNotificationsQueryParams, MarkNotificationReadParams } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth";
+import { normalizeBoolQueryParams } from "../lib/query-params";
 
 const router = Router();
 
@@ -18,7 +19,7 @@ function formatNotification(n: typeof notificationsTable.$inferSelect) {
 }
 
 router.get("/notifications/my", requireAuth, async (req, res): Promise<void> => {
-  const params = ListMyNotificationsQueryParams.safeParse(req.query);
+  const params = ListMyNotificationsQueryParams.safeParse(normalizeBoolQueryParams(req.query, ["unreadOnly"]));
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;

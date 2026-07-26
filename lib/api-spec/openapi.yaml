@@ -3,7 +3,7 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: GCC-TBC Pro Typing Platform API
+  description: SATyping Typing Platform API
 servers:
   - url: /api
     description: Base API path
@@ -1986,6 +1986,52 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /payments/verify:
+    post:
+      operationId: verifyPayment
+      tags: [payments]
+      summary: Verify a completed Razorpay checkout and activate the subscription
+      description: >
+        Called by the browser immediately after Razorpay's checkout handler fires. The server
+        verifies the HMAC signature over `order_id|payment_id` using RAZORPAY_KEY_SECRET and, if
+        valid, activates the payment (invoice, subscription, account access, commission).
+
+        This is the same activation the webhook performs and the two are idempotent, so whichever
+        arrives first wins. It exists because the webhook is an inbound call from Razorpay and can
+        never reach a server running on localhost — without it, sandbox/local payments would stay
+        pending forever.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyPaymentInput"
+      responses:
+        "200":
+          description: Payment verified and activated (or already activated by the webhook)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentVerificationResult"
+        "400":
+          description: Signature verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: The payment belongs to another user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No payment matches the given order id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /payments/webhook:
     post:
       operationId: paymentsWebhook
@@ -3789,6 +3835,34 @@ components:
           type: string
         razorpayKeyId:
           type: string
+
+    VerifyPaymentInput:
+      type: object
+      required: [razorpayOrderId, razorpayPaymentId, razorpaySignature]
+      description: >
+        The three values Razorpay's checkout handler returns to the browser. All are verified
+        server-side; the amount and plan are never taken from the client.
+      properties:
+        razorpayOrderId:
+          type: string
+          description: The `razorpay_order_id` from the checkout handler.
+        razorpayPaymentId:
+          type: string
+          description: The `razorpay_payment_id` from the checkout handler.
+        razorpaySignature:
+          type: string
+          description: HMAC-SHA256 of `order_id|payment_id`, signed with the Razorpay key secret.
+
+    PaymentVerificationResult:
+      type: object
+      required: [status, alreadyProcessed]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        alreadyProcessed:
+          type: boolean
+          description: True when the webhook had already activated this payment first.
 
     Payment:
       type: object
