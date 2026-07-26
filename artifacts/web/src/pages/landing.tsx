@@ -462,19 +462,19 @@ export default function Landing() {
                   <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
                     <Mail className="h-4 w-4" />
                   </div>
-                  <span>support@satyping.example</span>
+                  <span>sanskaralave40@gmail.com</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm">
                   <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
                     <Phone className="h-4 w-4" />
                   </div>
-                  <span>+91 98765 43210</span>
+                  <span>+91 7020986004</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm">
                   <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
                     <MapPin className="h-4 w-4" />
                   </div>
-                  <span>Pune, Maharashtra, India</span>
+                  <span>Kolhapur, Maharashtra, India</span>
                 </div>
               </div>
             </div>
