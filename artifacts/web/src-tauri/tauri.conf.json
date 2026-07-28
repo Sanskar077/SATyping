@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.satyping.app",
   "build": {
-    "frontendDist": "https://satyping.vercel.app",
+    "frontendDist": "https://sa-typing-api-project.vercel.app",
     "devUrl": "http://localhost:5000",
     "beforeDevCommand": "pnpm dev"
   },
