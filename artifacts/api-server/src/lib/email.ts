@@ -55,6 +55,13 @@ function getTransport() {
     port: Number(SMTP_PORT),
     secure: Number(SMTP_PORT) === 465,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
+    // Fail fast instead of hanging the caller. Without these, an unreachable SMTP host (wrong
+    // port, or a provider IP-allowlist rejecting this server) blocks the TCP connect forever —
+    // and any route that awaits sendEmail() inline (forgot-password, registration) hangs its
+    // HTTP response with it. 10s covers slow-but-working providers; anything longer is down.
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 15_000,
   });
   return cachedTransport;
 }
