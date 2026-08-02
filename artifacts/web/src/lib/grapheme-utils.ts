@@ -2,6 +2,7 @@
  * Grapheme cluster utilities using Intl.Segmenter (granularity: grapheme).
  * Shared by the engine, the map, and test code.
  */
+import { PENDING_PRE_I } from "./ism-remington-map";
 
 const SEGMENTER = new Intl.Segmenter("hi", { granularity: "grapheme" });
 
@@ -38,13 +39,19 @@ export const VOWEL_LENGTHENING: Record<string, Record<string, string>> = {
  * across TWO keystrokes. Mid-sequence — after क but before ा — the typed cluster is "क" while the
  * target is "का". Strict equality would flag that as wrong for one frame even though it's a
  * correctly-in-progress character. Since Devanagari matras only ever EXTEND a cluster (never
- * prepend to it — the one exception, ि, is already reordered before this comparison ever runs),
- * a still-forming cluster is only truly wrong once it can no longer become the target, i.e. once
- * it stops being a prefix of it.
+ * prepend to it — the one exception, ि, is reordered by the key handler), a still-forming
+ * cluster is only truly wrong once it can no longer become the target, i.e. once it stops being
+ * a prefix of it.
  *
  * The same in-progress tolerance applies to the vowel-lengthening pairs above: अ typed toward a
  * target of आ is a valid partial, not a mismatch, even though आ is not literally a string-prefix
  * of "अ" + anything (it's a different codepoint, not अ with something appended).
+ *
+ * PENDING VELANTI: a velanti struck before its consonant is committed immediately as ◌ + ि
+ * (dotted circle base — PENDING_PRE_I from ism-remington-map.ts) and reordered when the
+ * consonant lands. So "◌ि" on the way to "कि" — or "र्◌ि" on the way to "र्कि" — is a correctly
+ * in-progress cluster: everything before the ◌ must be a prefix of the target, and the target
+ * must end with the awaiting ि.
  */
 export function clusterMatch(typed: string, target: string): "exact" | "prefix" | "mismatch" {
   const t = typed.normalize("NFC");
@@ -52,5 +59,9 @@ export function clusterMatch(typed: string, target: string): "exact" | "prefix" 
   if (t === p) return "exact";
   if (t.length > 0 && p.startsWith(t)) return "prefix";
   if (Object.values(VOWEL_LENGTHENING[t] ?? {}).includes(p)) return "prefix";
+  if (t.endsWith(PENDING_PRE_I)) {
+    const before = t.slice(0, -PENDING_PRE_I.length);
+    if (p.endsWith("ि") && (before === "" || p.startsWith(before))) return "prefix";
+  }
   return "mismatch";
 }

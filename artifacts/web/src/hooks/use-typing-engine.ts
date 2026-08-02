@@ -47,8 +47,20 @@ export interface TypingEngineResult {
   complete:         () => void;
   getClusterState:  (i: number) => "correct" | "incorrect" | "cursor" | "pending";
   // ── Called by TypingArea ──────────────────────────────────────────────────
-  appendChars:    (chars: string) => void;
+  /**
+   * Returns true if the characters were committed, false if refused (passage cap reached or
+   * session completed). The key handler needs this to know whether a visible pre-consonant
+   * mark (velanti/reph) actually landed in the text before flagging it as pending.
+   */
+  appendChars:    (chars: string) => boolean;
   handleBackspace: () => void;
+  /**
+   * Removes exactly `count` trailing UTF-16 code units (NOT graphemes). Used by the key
+   * handler to strip a visibly-committed pre-consonant mark (ि is 1 unit, र् is 2) before
+   * re-emitting it in Unicode order around the consonant that follows. Grapheme-based
+   * backspace can't do this: once ि sits after a consonant they fuse into one cluster.
+   */
+  deleteTrailing: (count: number) => void;
   /**
    * Applies Remington two-keystroke composition to the tail of the committed text
    * (ा + े -> ो, half-letter + ा -> full consonant). Returns true if a rule fired and
@@ -227,8 +239,8 @@ export function useTypingEngine({
     setTypedText(next);
   }, []);
 
-  const appendChars = useCallback((chars: string) => {
-    if (!chars || isCompleted) return;
+  const appendChars = useCallback((chars: string): boolean => {
+    if (!chars || isCompleted) return false;
     const norm = chars.normalize("NFC");
     setStartTime((p) => p ?? Date.now());
     const prev = typedTextRef.current;
@@ -236,15 +248,29 @@ export function useTypingEngine({
     const next = lengthened ? prev.slice(0, -1) + lengthened : prev + norm;
     if (!freeMode) {
       const passLen = toGraphemes(passageTextRef.current.normalize("NFC")).length;
-      if (toGraphemes(next).length > passLen) return; // cap reached — ignore the keystroke
+      if (toGraphemes(next).length > passLen) return false; // cap reached — ignore the keystroke
     }
     commitText(next);
+    return true;
   }, [isCompleted, freeMode, commitText]);
 
   const handleBackspace = useCallback(() => {
     if (isCompleted) return;
     const g = toGraphemes(typedTextRef.current);
     commitText(g.length ? g.slice(0, -1).join("") : "");
+  }, [isCompleted, commitText]);
+
+  /**
+   * Strips exactly `count` trailing UTF-16 code units. Only the key handler calls this, and
+   * only to un-commit a pre-consonant mark it committed itself moments earlier (ि = 1 unit,
+   * र् = 2 units) so the mark can be re-emitted in Unicode order around the next consonant.
+   * Cannot use grapheme-based backspace: after "क" + "ि" the two fuse into ONE cluster "कि",
+   * and removing the last grapheme would delete the consonant along with the matra.
+   */
+  const deleteTrailing = useCallback((count: number) => {
+    if (isCompleted || count <= 0) return;
+    const prev = typedTextRef.current;
+    commitText(prev.slice(0, Math.max(0, prev.length - count)));
   }, [isCompleted, commitText]);
 
   /**
@@ -302,6 +328,6 @@ export function useTypingEngine({
     textareaRef, typedText, passageGraphemes, typedGraphemes,
     stats, elapsedSeconds, hasStarted, isCompleted, language,
     complete: handleComplete, getClusterState,
-    appendChars, handleBackspace, composeChars, setText, reset,
+    appendChars, handleBackspace, deleteTrailing, composeChars, setText, reset,
   };
 }

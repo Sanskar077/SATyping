@@ -72,8 +72,18 @@
 
 // ─── Key output types ────────────────────────────────────────────────────
 
-/** The pre-consonant ि matra (U+093F) — buffered until the next key. */
+/** The pre-consonant ि matra (U+093F) — reordered after the next consonant. */
 export const PRE_I_MATRA = '\u093F';
+/**
+ * Dotted circle (U+25CC) — the standard Unicode base for displaying a combining mark that
+ * has no consonant yet. A velanti struck before its consonant is committed as ◌ + ि so the
+ * FIRST key press is immediately visible (matching how the official ISM software renders a
+ * standalone matra). The ◌ also keeps the bare mark from fusing into the PREVIOUS cluster,
+ * and is stripped when the consonant arrives.
+ */
+export const DOTTED_CIRCLE = '◌';
+/** Visible committed form of a velanti still awaiting its consonant. */
+export const PENDING_PRE_I = DOTTED_CIRCLE + PRE_I_MATRA;
 /** Bare virama / halant (U+094D) — forms conjuncts/reph via Unicode shaping. */
 export const VIRAMA = '\u094D';
 /** Zero-Width Joiner (U+200D) — forces an explicit, standalone half-letter. */

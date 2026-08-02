@@ -28,6 +28,7 @@
 import {
   PRE_I_SENTINEL,
   PRE_I_MATRA,
+  PENDING_PRE_I,
   REPH_SENTINEL,
   REPH,
   DEVANAGARI_CONSONANTS,
@@ -39,8 +40,14 @@ export interface TypingKeyHandlerOptions {
   /** Resolved language: 'marathi' | 'hindi' | 'english' (anything else falls back to english). */
   language: string;
   isCompleted: boolean;
-  appendChars: (chars: string) => void;
+  /** Returns whether the characters were actually committed (false at the passage cap). */
+  appendChars: (chars: string) => boolean;
   handleBackspace: () => void;
+  /**
+   * Removes exactly `count` trailing UTF-16 code units from the committed text. Used to strip
+   * a visibly-committed pre-consonant mark before re-emitting it in Unicode order.
+   */
+  deleteTrailing: (count: number) => void;
 
   /**
    * Applies Remington two-keystroke composition (ा + े -> ो, half-letter + ा -> full
@@ -81,15 +88,31 @@ export function attachTypingKeyHandlers(
   opts: TypingKeyHandlerOptions,
 ): () => void {
   const {
-    language, isCompleted, appendChars, handleBackspace, composeChars,
+    language, isCompleted, appendChars, handleBackspace, deleteTrailing, composeChars,
     allowClipboard = false, onPaste, onUndo, onRedo, onSelectAll, onCopy,
   } = opts;
 
-  // Pre-consonant buffers — scoped to this attachment, matching the lifetime of the
-  // previous useRef-based implementation. There are exactly TWO pre-consonant keys on
-  // this layout: the short-i matra and reph.
-  let pendingPreI = false;
-  let pendingReph = false;
+  // ── Pre-consonant marks (velanti ि and reph र्) ─────────────────────────────
+  // Both are struck BEFORE the consonant they attach to (typewriter order) but Unicode wants
+  // them in logical order around it. The official ISM software shows the mark IMMEDIATELY on
+  // its own keystroke, then reorders it when the consonant lands. We match that exactly:
+  //
+  //   press f      → "ि" appears at once (rendered on a dotted circle — no base yet)
+  //   press d      → the ि is stripped and re-emitted after क → "कि"
+  //   press Bksp   → the visible ि is deleted like any other character — ONE press
+  //
+  // The old design buffered the mark invisibly instead, which is what produced the reported
+  // "first key press is ignored / needs pressing twice / backspace needs two presses" bug:
+  // nothing appeared on the first press (the mark sat in a hidden buffer), and the first
+  // backspace silently cancelled that hidden buffer instead of deleting visible text.
+  //
+  // `pendingMarks` records which trailing characters of the committed text are reorderable
+  // marks still awaiting their consonant, in strike order, with their UTF-16 widths (ि = 1
+  // unit, र् = 2) so they can be stripped precisely. Invariant: while non-empty, these marks
+  // ARE the tail of the committed text — every other keystroke either consumes the stack
+  // (consonant), detaches it (space/other), or pops it (backspace deletes the visible mark).
+  type PendingMark = { kind: "preI" | "reph"; units: number };
+  let pendingMarks: PendingMark[] = [];
 
   /**
    * Commits a resolved character, first giving the composition engine a chance to
@@ -101,14 +124,6 @@ export function attachTypingKeyHandlers(
     appendChars(chars);
   };
 
-  /** Flushes any buffered pre-consonant marks ahead of a space/newline/etc. */
-  const flushPending = (): string => {
-    let prefix = "";
-    if (pendingReph) { prefix += REPH; pendingReph = false; }
-    if (pendingPreI) { prefix += PRE_I_MATRA; pendingPreI = false; }
-    return prefix;
-  };
-
   // ── DEVANAGARI (Marathi / Hindi) — ISM Remington physical layout ───────
   if (isDevanagariLanguage(language)) {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -118,11 +133,11 @@ export function attachTypingKeyHandlers(
       if (isShortcut) {
         const k = e.key.toLowerCase();
         if (allowClipboard) {
-          if (k === "z") { e.preventDefault(); onUndo?.();  return; }
-          if (k === "y") { e.preventDefault(); onRedo?.();  return; }
+          if (k === "z") { e.preventDefault(); pendingMarks = []; onUndo?.();  return; }
+          if (k === "y") { e.preventDefault(); pendingMarks = []; onRedo?.();  return; }
           if (k === "a") { e.preventDefault(); onSelectAll?.(); return; }
           if (k === "c") { e.preventDefault(); onCopy?.();  return; }
-          if (k === "v" || k === "x") { return; } // let native 'paste'/'cut' fire
+          if (k === "v" || k === "x") { pendingMarks = []; return; } // let native 'paste'/'cut' fire
         } else if (["a", "c", "v", "x", "z", "y"].includes(k)) {
           e.preventDefault();
           return;
@@ -136,31 +151,41 @@ export function attachTypingKeyHandlers(
       }
 
       // ── Backspace ──────────────────────────────────────────────────
+      // A pending pre-consonant mark is VISIBLE committed text, so one press removes it.
+      // It is stripped by code units, not graphemes: an unattached mark can fuse into the
+      // preceding cluster ("अ"+"ि" segments as one cluster), and grapheme backspace would
+      // take the whole cluster with it. With no marks pending, normal grapheme backspace
+      // deletes the last composed character in a single press.
       if (e.key === "Backspace") {
         e.preventDefault();
-        // A buffered pre-consonant mark is not yet part of the committed text, so
-        // backspace cancels the buffer instead of deleting a real character.
-        if (pendingPreI) {
-          pendingPreI = false;
-        } else if (pendingReph) {
-          pendingReph = false;
-        } else {
-          handleBackspace();
-        }
+        const last = pendingMarks.pop();
+        if (last) deleteTrailing(last.units);
+        else handleBackspace();
         return;
       }
 
       // ── Space ─────────────────────────────────────────────────────
+      // A pending velanti is emitted BEFORE the space in proper Unicode order (no consonant
+      // base, so just the matra). Reph is already in proper order.
       if (e.code === "Space" || e.key === " ") {
         e.preventDefault();
-        appendChars(flushPending() + " ");
+        if (pendingMarks.length > 0) {
+          deleteTrailing(pendingMarks.reduce((n, m) => n + m.units, 0));
+          const reph = pendingMarks.some((m) => m.kind === "reph") ? REPH : "";
+          const preI = pendingMarks.some((m) => m.kind === "preI") ? PRE_I_MATRA : "";
+          appendChars(reph + preI + " ");
+          pendingMarks = [];
+        } else {
+          appendChars(" ");
+        }
         return;
       }
 
       // ── Enter (Notepad allows newlines; exams don't use this branch) ─
       if (e.key === "Enter" && allowClipboard) {
         e.preventDefault();
-        appendChars(flushPending() + "\n");
+        pendingMarks = [];
+        appendChars("\n");
         return;
       }
 
@@ -176,39 +201,49 @@ export function attachTypingKeyHandlers(
 
       e.preventDefault();
 
-      // ── Pre-consonant keys (short-i matra, reph) ────────────────────
-      // Neither is committed on its own keystroke: both are buffered and emitted
-      // immediately before the consonant that follows.
+      // ── Pre-consonant keys (velanti ि, reph र्) ─────────────────────
+      // Committed IMMEDIATELY so the first key press is always visible — this is the fix
+      // for the "first press ignored" bug. The velanti is shown on a dotted circle (◌ि,
+      // the Unicode-standard display for an unattached mark, and what official ISM shows);
+      // reph is already a valid standalone sequence (र्). The stack records what was
+      // committed so the next consonant can strip and reorder it.
+      //
+      // At most ONE pending mark per kind: pressing the same key twice strands the first
+      // occurrence as permanent text (dropping it from the stack) and keeps the new one
+      // pending — so f f d yields a stray ◌ि followed by कि, as the old engine did.
       if (mapped === PRE_I_SENTINEL) {
-        if (pendingPreI) {
-          // Double press: commit the first one and stay buffered.
-          appendChars(PRE_I_MATRA);
-        } else {
-          pendingPreI = true;
+        if (appendChars(PENDING_PRE_I)) {
+          pendingMarks = pendingMarks.filter((m) => m.kind !== "preI");
+          pendingMarks.push({ kind: "preI", units: PENDING_PRE_I.length });
         }
         return;
       }
 
       if (mapped === REPH_SENTINEL) {
-        if (pendingReph) {
-          appendChars(REPH);
-        } else {
-          pendingReph = true;
+        if (appendChars(REPH)) {
+          pendingMarks = pendingMarks.filter((m) => m.kind !== "reph");
+          pendingMarks.push({ kind: "reph", units: REPH.length });
         }
         return;
       }
 
-      // ── Emit any buffered pre-consonant marks in the correct order ──
-      if (pendingPreI || pendingReph) {
-        const isConsonant = DEVANAGARI_CONSONANTS.has(mapped);
-        // Reph precedes the consonant; the short-i matra follows it in Unicode even
-        // though it is struck first. For a non-consonant there is nothing to reorder
-        // around, so the buffered marks are simply flushed ahead of it.
-        const reph = pendingReph ? REPH : "";
-        const preI = pendingPreI ? PRE_I_MATRA : "";
-        pendingReph = false;
-        pendingPreI = false;
-        appendChars(isConsonant ? reph + mapped + preI : reph + preI + mapped);
+      // ── Reorder visible pre-consonant marks around this keystroke ──
+      if (pendingMarks.length > 0) {
+        const marks = pendingMarks;
+        pendingMarks = [];
+        if (DEVANAGARI_CONSONANTS.has(mapped)) {
+          // Strip the visible placeholder forms, then re-emit in Unicode order: reph
+          // before the consonant, velanti after it (◌ि + र् on screen → र् + क + ि = "र्कि").
+          deleteTrailing(marks.reduce((n, m) => n + m.units, 0));
+          const reph = marks.some((m) => m.kind === "reph") ? REPH : "";
+          const preI = marks.some((m) => m.kind === "preI") ? PRE_I_MATRA : "";
+          appendChars(reph + mapped + preI);
+          return;
+        }
+        // Non-consonant: the stranded marks keep their visible form exactly as typed
+        // (matching the official software) and the key applies normally — but plain
+        // append, never composition, which must not fire across a stranded mark.
+        appendChars(mapped);
         return;
       }
 
@@ -221,6 +256,7 @@ export function attachTypingKeyHandlers(
     const onPasteEvent = (e: ClipboardEvent) => {
       if (!allowClipboard) { e.preventDefault(); return; }
       e.preventDefault();
+      pendingMarks = [];
       const text = e.clipboardData?.getData("text/plain") ?? "";
       // Only the final committed Unicode is ever validated/inserted — never
       // raw keys — matching ISM V6 behaviour.
@@ -235,8 +271,7 @@ export function attachTypingKeyHandlers(
       ta.removeEventListener("keydown", onKeyDown);
       ta.removeEventListener("input", onInput, true);
       ta.removeEventListener("paste", onPasteEvent);
-      pendingPreI = false;
-      pendingReph = false;
+      pendingMarks = [];
     };
   }
 

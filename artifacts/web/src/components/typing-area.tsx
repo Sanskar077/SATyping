@@ -44,7 +44,7 @@ export function TypingArea({
 }: Props) {
   const {
     textareaRef, passageGraphemes, getClusterState, isCompleted,
-    appendChars, handleBackspace, composeChars, language,
+    appendChars, handleBackspace, deleteTrailing, composeChars, language,
   } = engine;
 
   // ── Attach DOM event listeners ────────────────────────────────────────
@@ -56,9 +56,9 @@ export function TypingArea({
     if (!ta) return undefined;
 
     return attachTypingKeyHandlers(ta, {
-      language, isCompleted, appendChars, handleBackspace, composeChars,
+      language, isCompleted, appendChars, handleBackspace, deleteTrailing, composeChars,
     });
-  }, [language, isCompleted, appendChars, handleBackspace, composeChars, textareaRef]);
+  }, [language, isCompleted, appendChars, handleBackspace, deleteTrailing, composeChars, textareaRef]);
 
   // ── Focus management ──────────────────────────────────────────────────
   useEffect(() => {

@@ -36,7 +36,7 @@ export function HeroTypingDemo() {
   const [language, setLanguage] = useState<DemoLanguage>("marathi");
 
   const engine = useTypingEngine({ passageText: "", language, freeMode: true });
-  const { textareaRef, typedText, stats, appendChars, handleBackspace, composeChars, reset } = engine;
+  const { textareaRef, typedText, stats, appendChars, handleBackspace, deleteTrailing, composeChars, reset } = engine;
 
   useEffect(() => {
     const ta = textareaRef.current;
@@ -46,9 +46,10 @@ export function HeroTypingDemo() {
       isCompleted: false,
       appendChars,
       handleBackspace,
+      deleteTrailing,
       composeChars,
     });
-  }, [language, appendChars, handleBackspace, composeChars, textareaRef]);
+  }, [language, appendChars, handleBackspace, deleteTrailing, composeChars, textareaRef]);
 
   // Focus-on-click, same pattern as the notepad surface — but never steal focus on mount:
   // this is a landing page, and yanking focus into a demo box on load is hostile.

@@ -21,7 +21,7 @@ interface Props {
 }
 
 export function AnswerTypingArea({ engine, language, fontSize = "text-xl", disabled = false }: Props) {
-  const { textareaRef, typedText, appendChars, handleBackspace, composeChars, isCompleted } = engine;
+  const { textareaRef, typedText, appendChars, handleBackspace, deleteTrailing, composeChars, isCompleted } = engine;
 
   useEffect(() => {
     const ta = textareaRef.current;
@@ -31,9 +31,10 @@ export function AnswerTypingArea({ engine, language, fontSize = "text-xl", disab
       isCompleted: isCompleted || disabled,
       appendChars,
       handleBackspace,
+      deleteTrailing,
       composeChars,
     });
-  }, [language, isCompleted, disabled, appendChars, handleBackspace, composeChars, textareaRef]);
+  }, [language, isCompleted, disabled, appendChars, handleBackspace, deleteTrailing, composeChars, textareaRef]);
 
   // Keep the invisible capture textarea focused so keystrokes are never dropped, but don't steal
   // focus back from real controls (Submit button, etc.).

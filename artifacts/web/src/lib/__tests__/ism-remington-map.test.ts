@@ -1,43 +1,73 @@
 import { describe, it, expect } from "vitest";
 import {
-  REMINGTON_MAP, PRE_I_SENTINEL, REPH_SENTINEL, PRE_I_MATRA, REPH,
+  REMINGTON_MAP, PRE_I_SENTINEL, REPH_SENTINEL, PRE_I_MATRA, PENDING_PRE_I, REPH,
   DEVANAGARI_CONSONANTS, applyComposition, HALF, VIRAMA,
 } from "../ism-remington-map";
 
 /**
  * Simulates the Devanagari branch of attachTypingKeyHandlers against a plain string,
- * so keystroke sequences can be asserted without a DOM. This mirrors the real handler's
- * logic: two pre-consonant buffers, composition-before-append.
+ * so keystroke sequences can be asserted without a DOM. Mirrors the real handler:
+ * pre-consonant marks commit a VISIBLE form immediately (velanti as ◌ि on a dotted
+ * circle, reph as र्) and are stripped + reordered when the consonant lands;
+ * composition applies before plain appends. "<BS>" simulates a Backspace press
+ * (grapheme-wise removal, or pending-mark removal by code units — as the handler does).
  */
 function type(keys: string[]): string {
   let text = "";
-  let preI = false;
-  let reph = false;
+  // Mirror of the handler's pendingMarks stack (kind + committed UTF-16 width).
+  let marks: { kind: "preI" | "reph"; units: number }[] = [];
+
+  const graphemeBackspace = (t: string): string => {
+    const seg = [...new Intl.Segmenter("hi", { granularity: "grapheme" }).segment(t)].map((s) => s.segment);
+    return seg.length ? seg.slice(0, -1).join("") : "";
+  };
 
   for (const k of keys) {
+    if (k === "<BS>") {
+      const last = marks.pop();
+      text = last ? text.slice(0, text.length - last.units) : graphemeBackspace(text);
+      continue;
+    }
     if (k === " ") {
-      text += (reph ? REPH : "") + (preI ? PRE_I_MATRA : "") + " ";
-      preI = false; reph = false;
+      // Space emits pending marks in Unicode order (no consonant base), then the space.
+      if (marks.length > 0) {
+        const base = text.slice(0, text.length - marks.reduce((n, m) => n + m.units, 0));
+        const r = marks.some((m) => m.kind === "reph") ? REPH : "";
+        const i = marks.some((m) => m.kind === "preI") ? PRE_I_MATRA : "";
+        text = base + r + i + " ";
+        marks = [];
+      } else {
+        text += " ";
+      }
       continue;
     }
     const mapped = REMINGTON_MAP[k];
     if (mapped === undefined || mapped === "") continue;
 
     if (mapped === PRE_I_SENTINEL) {
-      if (preI) text += PRE_I_MATRA; else preI = true;
+      text += PENDING_PRE_I;
+      marks = marks.filter((m) => m.kind !== "preI");
+      marks.push({ kind: "preI", units: PENDING_PRE_I.length });
       continue;
     }
     if (mapped === REPH_SENTINEL) {
-      if (reph) text += REPH; else reph = true;
+      text += REPH;
+      marks = marks.filter((m) => m.kind !== "reph");
+      marks.push({ kind: "reph", units: REPH.length });
       continue;
     }
 
-    if (preI || reph) {
-      const isCons = DEVANAGARI_CONSONANTS.has(mapped);
-      const r = reph ? REPH : "";
-      const i = preI ? PRE_I_MATRA : "";
-      preI = false; reph = false;
-      text += isCons ? r + mapped + i : r + i + mapped;
+    if (marks.length > 0) {
+      const consumed = marks;
+      marks = [];
+      if (DEVANAGARI_CONSONANTS.has(mapped)) {
+        text = text.slice(0, text.length - consumed.reduce((n, m) => n + m.units, 0));
+        const r = consumed.some((m) => m.kind === "reph") ? REPH : "";
+        const i = consumed.some((m) => m.kind === "preI") ? PRE_I_MATRA : "";
+        text += r + mapped + i;
+      } else {
+        text += mapped; // marks stay stranded; plain append, no composition across them
+      }
       continue;
     }
 
@@ -160,7 +190,9 @@ describe("pre-consonant reordering", () => {
   });
 
   it("commits the first mark when a pre-consonant key is pressed twice", () => {
-    expect(type(["f", "f", "d"])).toBe(nfc(PRE_I_MATRA + "कि"));
+    // f f d: first f commits ◌ि (visible), second f strands it (no longer pending)
+    // and commits a new ◌ि (pending), then d reorders → ◌ि + कि
+    expect(type(["f", "f", "d"])).toBe(nfc(PENDING_PRE_I + "कि"));
   });
 });
 
@@ -201,6 +233,57 @@ describe("real Marathi words end-to-end", () => {
       expect(type(keys)).toBe(nfc(word));
     });
   }
+});
+
+describe("first-press visibility & single-press backspace (bug: velanti required double press)", () => {
+  it("velanti is VISIBLE after its first key press (never silently buffered)", () => {
+    // The reported bug: pressing f showed nothing until a second press.
+    // Now one press commits the visible pending form ◌ि immediately.
+    expect(type(["f"])).toBe(nfc(PENDING_PRE_I));
+  });
+
+  it("reph is VISIBLE after its first key press", () => {
+    expect(type(["Z"])).toBe(nfc(REPH));
+  });
+
+  it("velanti still reorders after the consonant lands (f d → कि)", () => {
+    expect(type(["f", "d"])).toBe(nfc("कि"));
+  });
+
+  it("ONE backspace removes a just-typed velanti (bug: needed two presses)", () => {
+    // The reported bug: first backspace silently cancelled a hidden buffer (nothing
+    // visibly changed), needing a second press. Now one press removes the visible mark.
+    expect(type(["f", "<BS>"])).toBe("");
+  });
+
+  it("ONE backspace removes a just-typed reph", () => {
+    expect(type(["Z", "<BS>"])).toBe("");
+  });
+
+  it("backspace after velanti leaves preceding text intact (द f <BS> → द)", () => {
+    expect(type(["n", "f", "<BS>"])).toBe(nfc("द"));
+  });
+
+  it("velanti → backspace → velanti → consonant still composes correctly", () => {
+    // Cancel-and-retry must not corrupt state: f <BS> f d → कि
+    expect(type(["f", "<BS>", "f", "d"])).toBe(nfc("कि"));
+  });
+
+  it("ONE backspace removes a completed consonant+matra cluster (कि → empty)", () => {
+    // Grapheme backspace: कि is one cluster, one press removes it whole.
+    expect(type(["f", "d", "<BS>"])).toBe("");
+  });
+
+  it("mid-word velanti stays visible then reorders (द f व → दविस)", () => {
+    expect(type(["n", "f"])).toBe(nfc("द" + PENDING_PRE_I));
+    // The velanti struck after द attaches to the NEXT consonant व → द + वि + स
+    expect(type(["n", "f", "o", "l"])).toBe(nfc("दविस"));
+  });
+
+  it("backspace with reph + velanti both pending removes only the most recent mark", () => {
+    // Z f <BS> leaves the reph pending; a following consonant still gets it.
+    expect(type(["Z", "f", "<BS>", "d"])).toBe(nfc("र्क"));
+  });
 });
 
 describe("map integrity", () => {

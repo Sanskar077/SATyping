@@ -18,14 +18,13 @@
  * the target (computed via a fix-point over the composition rules), so lookups are microseconds —
  * and memoised on top of that, since passages repeat the same clusters constantly.
  *
- * ── Known limitation ──────────────────────────────────────────────────────────
- * The pre-consonant buffers (ि, reph) live privately inside the key handler and are invisible in
- * committed text. After the user presses `f` (buffered ि), the committed text hasn't changed, so
- * the hint still shows the full remaining sequence starting at `f`. The UI mitigates this by
- * showing the WHOLE key sequence for the cluster, not just one key.
+ * Pre-consonant marks are visible in committed text (velanti commits ◌ि immediately, reph
+ * commits र्), so after the user presses `f` the partial passed here ends with ◌ि and the
+ * simulation resumes with the pending flag set — hints track every keystroke, including the
+ * pre-consonant ones.
  */
 import {
-  REMINGTON_MAP, PRE_I_SENTINEL, REPH_SENTINEL, PRE_I_MATRA, REPH,
+  REMINGTON_MAP, PRE_I_SENTINEL, REPH_SENTINEL, PRE_I_MATRA, PENDING_PRE_I, REPH,
   DEVANAGARI_CONSONANTS, COMPOSITION_RULES, VIRAMA, applyComposition,
 } from "@/lib/ism-remington-map";
 import { clusterMatch } from "@/lib/grapheme-utils";
@@ -107,9 +106,15 @@ function candidateKeys(target: string): string[] {
 // ─── Keystroke simulation (mirrors typing-key-handler.ts exactly) ─────────────
 
 interface SimState {
+  /** Committed text, INCLUDING the visible pending forms (◌ि / र्) — as on screen. */
   text: string;
   pendingPreI: boolean;
   pendingReph: boolean;
+}
+
+/** UTF-16 width of the visible pending marks at the tail of `state.text`. */
+function pendingUnits(state: SimState): number {
+  return (state.pendingPreI ? PENDING_PRE_I.length : 0) + (state.pendingReph ? REPH.length : 0);
 }
 
 /** Applies one key to a simulated state, exactly as the real handler would. */
@@ -117,21 +122,29 @@ function pressKey(state: SimState, key: string): SimState | null {
   const mapped = REMINGTON_MAP[key];
   if (mapped === undefined || mapped === "") return null;
 
+  // Pre-consonant marks commit their visible form immediately (◌ि on a dotted circle,
+  // र् as-is) and are stripped/reordered when the consonant lands — same as the handler.
   if (mapped === PRE_I_SENTINEL) {
-    if (state.pendingPreI) return null; // double-press commits a bare ि — never useful in a hint
-    return { ...state, pendingPreI: true };
+    if (state.pendingPreI) return null; // double-press strands a bare ◌ि — never useful in a hint
+    return { ...state, text: state.text + PENDING_PRE_I, pendingPreI: true };
   }
   if (mapped === REPH_SENTINEL) {
     if (state.pendingReph) return null;
-    return { ...state, pendingReph: true };
+    return { ...state, text: state.text + REPH, pendingReph: true };
   }
 
   if (state.pendingPreI || state.pendingReph) {
-    const isConsonant = DEVANAGARI_CONSONANTS.has(mapped);
+    if (DEVANAGARI_CONSONANTS.has(mapped)) {
+      const base = state.text.slice(0, state.text.length - pendingUnits(state));
+      const reph = state.pendingReph ? REPH : "";
+      const preI = state.pendingPreI ? PRE_I_MATRA : "";
+      return { text: base + reph + mapped + preI, pendingPreI: false, pendingReph: false };
+    }
+    // Non-consonant: marks are emitted in Unicode order (no base consonant), then the key.
     const reph = state.pendingReph ? REPH : "";
     const preI = state.pendingPreI ? PRE_I_MATRA : "";
-    const emitted = isConsonant ? reph + mapped + preI : reph + preI + mapped;
-    return { text: state.text + emitted, pendingPreI: false, pendingReph: false };
+    const base = state.text.slice(0, state.text.length - pendingUnits(state));
+    return { text: base + reph + preI + mapped, pendingPreI: false, pendingReph: false };
   }
 
   const composed = applyComposition(state.text, mapped);
@@ -164,10 +177,16 @@ export function keySequenceForCluster(target: string, partial = ""): string[] | 
   if (cached !== undefined) return cached;
 
   const keys = candidateKeys(goal);
+  // A trailing ◌ि in the partial is a pending velanti awaiting its consonant (the handler
+  // commits the visible form immediately) — resume the simulation with the flag set so the
+  // next consonant strips and reorders it, exactly as the real handler will. A trailing र्
+  // needs no flag: reph already precedes its consonant, so a plain append reaches the same
+  // text as the reorder path.
+  const startPendingPreI = start.endsWith(PENDING_PRE_I);
   const queue: { state: SimState; path: string[] }[] = [
-    { state: { text: start, pendingPreI: false, pendingReph: false }, path: [] },
+    { state: { text: start, pendingPreI: startPendingPreI, pendingReph: false }, path: [] },
   ];
-  const seen = new Set<string>([`${start}|00`]);
+  const seen = new Set<string>([`${start}|${startPendingPreI ? 1 : 0}0`]);
   let explored = 0;
 
   while (queue.length > 0 && explored < MAX_STATES) {
@@ -189,9 +208,10 @@ export function keySequenceForCluster(target: string, partial = ""): string[] | 
       // Prune states that have diverged from the goal. A strict is-prefix test is WRONG here:
       // intermediate states legitimately mismatch by a short tail that a later keystroke
       // rewrites — an explicit half-letter (consonant+virama+ZWJ, 3 chars) collapses to the
-      // 1-char full consonant when the completing ा lands, र becomes ऱ only after nukta, and
-      // का becomes को when े lands. All such rewrites touch at most the trailing few characters,
-      // so any state whose tail-divergence from the goal exceeds that window can never recover.
+      // 1-char full consonant when the completing ा lands, र becomes ऱ only after nukta, का
+      // becomes को when े lands, and a pending ◌ि (2 chars) is stripped when its consonant
+      // arrives. All such rewrites touch at most the trailing few characters, so any state
+      // whose tail-divergence from the goal exceeds that window can never recover.
       const common = lcp(nfc, goal);
       if (nfc.length - common > 3) continue;
 
