@@ -50,6 +50,17 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      onwarn(warning, warn) {
+        // Radix/shadcn components carry a "use client" directive that Rollup ignores in a
+        // client-only Vite build; Rollup then fails to sourcemap its own warning, producing
+        // the confusing "Error when using sourcemap for reporting an error" lines. Both are
+        // pure noise here — suppress them so CI/Vercel logs only show real problems.
+        if (warning.code === "MODULE_LEVEL_DIRECTIVE") return;
+        if (warning.code === "SOURCEMAP_ERROR") return;
+        warn(warning);
+      },
+    },
   },
   server: {
     port,
