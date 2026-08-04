@@ -114,8 +114,9 @@
   --app-font-mono: 'Space Mono', ui-monospace, monospace;
   --radius: 0.85rem;
 
-  /* Liquid glass — light: higher fill opacity keeps 4.5:1 text contrast on cream */
-  --glass-opacity: 0.72;
+  /* Liquid glass — light. Tuned against the ambient strata backdrop: washes behind
+   * panels are ≤0.35 alpha over cream, so 0.58 fill keeps body text above 4.5:1. */
+  --glass-opacity: 0.58;
   --glass-sheen: 0 0% 100% / 0.6;
   --glass-border-opacity: 0.6;
 }
@@ -162,8 +163,9 @@
   --input: 24 13% 23%;
   --ring: 16 86% 58%;
 
-  /* Liquid glass — dark: lower fill opacity (dark surfaces read glassier), faint top sheen */
-  --glass-opacity: 0.68;
+  /* Liquid glass — dark: lower fill opacity (dark surfaces read glassier), faint top
+   * sheen. Tuned against the terracotta strata backdrop — dark-on-dark keeps headroom. */
+  --glass-opacity: 0.52;
   --glass-sheen: 0 0% 100% / 0.07;
   --glass-border-opacity: 0.55;
 }
@@ -213,7 +215,7 @@
   /* Overlay surfaces (dropdowns, popovers, dialogs) sit over arbitrary content, so they
    * get a stronger fill than in-flow cards to guarantee menu-text contrast. */
   .glass-overlay {
-    background-color: hsl(var(--popover) / 0.88);
+    background-color: hsl(var(--popover) / 0.82);
     -webkit-backdrop-filter: blur(18px) saturate(1.35);
     backdrop-filter: blur(18px) saturate(1.35);
     border-color: hsl(var(--popover-border) / var(--glass-border-opacity));
@@ -240,6 +242,66 @@
   }
   body::before {
     display: none;
+  }
+  .ambient-backdrop {
+    display: none;
+  }
+}
+
+/* ─── Ambient backdrop — drifting sandstone strata ────────────────────────────
+ * Rendered by <AmbientBackdrop/> (three seamless SVG wave bands behind all
+ * content). Colour bands are theme-token-derived so dark mode reads as deep
+ * layered terracotta (like the reference macro photo) and light mode reads as
+ * pale sun-washed sandstone — same component, two "images".
+ *
+ * The drift is transform-only (translateX of a 200%-wide layer by exactly half
+ * its width, matching the wave period) → seamless loop on the compositor
+ * thread; zero JS, zero layout, zero paint after the first frame.
+ */
+.ambient-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -2; /* under body::before's radial glow */
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.stratum-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 100%;
+  animation: stratum-drift linear infinite;
+  will-change: transform;
+}
+
+@keyframes stratum-drift {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* Band fills — light: sun-washed sand, barely-there washes over the cream page.
+ * Each band is layered on the one above, so alphas stay low; the accumulation is
+ * what produces the graded sediment look rather than any single heavy fill. */
+.stratum-1 { fill: hsl(32 62% 86% / 0.30); }
+.stratum-2 { fill: hsl(28 58% 82% / 0.26); }
+.stratum-3 { fill: hsl(24 56% 78% / 0.24); }
+.stratum-4 { fill: hsl(20 54% 74% / 0.22); }
+.stratum-5 { fill: hsl(17 52% 70% / 0.20); }
+.stratum-6 { fill: hsl(14 50% 66% / 0.18); }
+
+/* Dark: deep layered terracotta — the reference-photo palette */
+.dark .stratum-1 { fill: hsl(24 44% 24% / 0.42); }
+.dark .stratum-2 { fill: hsl(22 46% 21% / 0.44); }
+.dark .stratum-3 { fill: hsl(20 48% 18% / 0.46); }
+.dark .stratum-4 { fill: hsl(18 50% 15% / 0.48); }
+.dark .stratum-5 { fill: hsl(16 52% 12% / 0.50); }
+.dark .stratum-6 { fill: hsl(14 54% 10% / 0.52); }
+
+@media (prefers-reduced-motion: reduce) {
+  .stratum-layer {
+    animation: none;
   }
 }
 
@@ -339,6 +401,21 @@
 .stat-pop {
   display: inline-block;
   animation: stat-pop var(--dur-base) var(--ease-out) 200ms both;
+}
+
+/* Scroll reveal — below-fold cards rise into place as they enter the viewport.
+ * CSS scroll-driven animation: zero JS, compositor-only, and on browsers without
+ * animation-timeline support the content simply renders static (no IO polyfill).
+ * Reduced-motion is covered by the .glass-rise rule above (same keyframes). */
+@supports (animation-timeline: view()) {
+  .scroll-reveal {
+    animation: glass-rise var(--ease-out) both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 55%;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .scroll-reveal { animation: none; }
+  }
 }
 
 /* ─── Brand caret (wordmark logo) ────────────────────────────────────────────

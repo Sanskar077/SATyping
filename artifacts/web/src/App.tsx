@@ -10,6 +10,7 @@ import { AppLayout } from "@/components/layout";
 import { AdminLayout } from "@/components/admin-layout";
 import { KeyboardOverlay } from "@/components/keyboard-overlay";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AmbientBackdrop } from "@/components/ambient-backdrop";
 
 // Public pages
 import Landing from "@/pages/landing";
@@ -236,6 +237,9 @@ function App() {
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
+          {/* Animated sandstone-strata backdrop — sits behind everything (z -2),
+              gives the liquid-glass panels colour to refract. Theme-aware. */}
+          <AmbientBackdrop />
           <AuthProvider>
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
               <Router />

@@ -193,17 +193,19 @@ export default function ExamSession() {
 
       <Progress value={liveStats.progress} className="h-1.5" />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      {/* Split panels — viewport-capped so the answer box and Submit never scroll off
+          screen (see practice/session.tsx for the same pattern + rationale). */}
+      <div className="grid gap-4 lg:grid-cols-2 lg:h-[calc(100vh-13rem)] lg:min-h-[24rem]">
         {/* Left: question */}
-        <Card className="overflow-hidden">
-          <CardHeader className="bg-muted/50 border-b py-3">
+        <Card className="overflow-hidden flex flex-col">
+          <CardHeader className="bg-muted/50 border-b py-3 shrink-0">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <FileText className="h-4 w-4 text-primary" />Exam Question
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-4">
+          <CardContent className="p-4 flex-1 overflow-y-auto">
             <div
-              className="min-h-[20rem] whitespace-pre-wrap break-words text-foreground/90 select-none"
+              className="whitespace-pre-wrap break-words text-foreground/90 select-none"
               style={{
                 fontFamily: isDevanagari
                   ? "'Noto Sans Devanagari', 'Mangal', 'Kokila', 'Arial Unicode MS', sans-serif"
@@ -219,8 +221,8 @@ export default function ExamSession() {
         </Card>
 
         {/* Right: answer */}
-        <Card className="overflow-hidden">
-          <CardHeader className="bg-muted/50 border-b py-3 flex-row items-center justify-between space-y-0">
+        <Card className="overflow-hidden flex flex-col">
+          <CardHeader className="bg-muted/50 border-b py-3 flex-row items-center justify-between space-y-0 shrink-0">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <PenLine className="h-4 w-4 text-primary" />Your Answer
             </CardTitle>
@@ -230,9 +232,11 @@ export default function ExamSession() {
               {fmt(timeLeft)}
             </span>
           </CardHeader>
-          <CardContent className="p-4 space-y-3">
-            <AnswerTypingArea engine={engine} language={passageLanguage} fontSize="text-lg" />
-            <div className="flex items-center justify-between">
+          <CardContent className="p-4 flex-1 flex flex-col gap-3 min-h-0">
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <AnswerTypingArea engine={engine} language={passageLanguage} fontSize="text-lg" />
+            </div>
+            <div className="flex items-center justify-between shrink-0">
               <span className="text-xs text-muted-foreground">
                 {hasStarted
                   ? `${liveStats.totalTyped} / ${liveStats.totalPassage} characters`

@@ -116,10 +116,10 @@ export default function Landing() {
   const studentPlans = plansData?.plans ?? [];
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="h-16 border-b border-border flex items-center justify-between px-6 lg:px-16 sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="h-16 glass-overlay border-b flex items-center justify-between px-6 lg:px-16 sticky top-0 z-30">
         <div className="flex items-center gap-2">
           <BrandWordmark className="text-xl" />
         </div>
@@ -202,7 +202,7 @@ export default function Landing() {
           {/* Stats row */}
           <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6 mt-16">
             {STATS.map(({ value, label, sub }) => (
-              <div key={label} className="flex flex-col items-center p-4 rounded-xl border border-border bg-card shadow-sm">
+              <div key={label} className="glass scroll-reveal flex flex-col items-center p-4 rounded-xl border shadow-sm">
                 <span className="text-2xl font-extrabold text-primary leading-none mb-0.5">{value}</span>
                 <span className="text-sm font-semibold text-foreground">{label}</span>
                 <span className="text-xs text-muted-foreground">{sub}</span>
@@ -212,7 +212,7 @@ export default function Landing() {
         </section>
 
         {/* ── Features ───────────────────────────────────────────────────────── */}
-        <section id="features" className="py-24 px-6 lg:px-16 bg-muted/30 border-y border-border">
+        <section id="features" className="py-24 px-6 lg:px-16 bg-muted/20 border-y border-border/60">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-14">
               <p className="text-sm font-semibold uppercase tracking-widest text-primary mb-3">Everything you need</p>
@@ -228,7 +228,7 @@ export default function Landing() {
               {FEATURES.map(({ icon: Icon, title, desc }) => (
                 <div
                   key={title}
-                  className="group bg-card p-7 rounded-2xl border border-border shadow-sm hover:shadow-md hover:border-primary/30 transition-all duration-200"
+                  className="group glass glass-interactive scroll-reveal p-7 rounded-2xl border shadow-sm hover:border-primary/30"
                 >
                   <div className="inline-flex items-center justify-center h-11 w-11 rounded-xl bg-primary/10 mb-5 group-hover:bg-primary/15 transition-colors">
                     <Icon className="h-5 w-5 text-primary" />
@@ -272,7 +272,7 @@ export default function Landing() {
 
             {/* Visual card mock */}
             <div className="relative">
-              <div className="rounded-2xl border border-border bg-card shadow-lg p-6 space-y-4">
+              <div className="glass rounded-2xl border shadow-lg p-6 space-y-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-semibold">Live Session</span>
                   <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 font-medium">● Active</span>
@@ -321,7 +321,7 @@ export default function Landing() {
         </section>
 
         {/* ── Plans teaser ──────────────────────────────────────────────────── */}
-        <section id="plans" className="py-24 px-6 lg:px-16 bg-muted/30 border-y border-border">
+        <section id="plans" className="py-24 px-6 lg:px-16 bg-muted/20 border-y border-border/60">
           <div className="max-w-5xl mx-auto text-center">
             <p className="text-sm font-semibold uppercase tracking-widest text-primary mb-3">Simple pricing</p>
             <h2 className="text-3xl lg:text-4xl font-bold tracking-tight text-foreground mb-4">
@@ -335,13 +335,13 @@ export default function Landing() {
             {plansLoading ? (
               <div className="grid gap-6 md:grid-cols-3 mb-10">
                 {[0, 1, 2].map((i) => (
-                  <div key={i} className="bg-card rounded-2xl border border-border p-6 h-56 animate-pulse" />
+                  <div key={i} className="glass rounded-2xl border p-6 h-56 animate-pulse" />
                 ))}
               </div>
             ) : studentPlans.length > 0 ? (
               <div className="grid gap-6 md:grid-cols-3 mb-10 text-left">
                 {studentPlans.slice(0, 3).map((plan) => (
-                  <div key={plan.id} className="bg-card rounded-2xl border border-border shadow-sm p-6">
+                  <div key={plan.id} className="glass glass-interactive scroll-reveal rounded-2xl border shadow-sm p-6">
                     <h3 className="font-bold text-lg mb-1">{plan.name}</h3>
                     <p className="text-3xl font-black mb-1">
                       {plan.priceInPaise === 0 ? "Free" : `₹${(plan.priceInPaise / 100).toFixed(0)}`}
@@ -359,7 +359,7 @@ export default function Landing() {
                 ))}
               </div>
             ) : (
-              <div className="bg-card rounded-2xl border border-border shadow-sm p-8 text-left mb-8">
+              <div className="glass rounded-2xl border shadow-sm p-8 text-left mb-8">
                 <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
                   <div>
                     <h3 className="text-lg font-bold">What's included in every plan</h3>
@@ -401,7 +401,7 @@ export default function Landing() {
             </div>
             <div className="grid gap-6 md:grid-cols-3">
               {TESTIMONIALS.map((t) => (
-                <div key={t.name} className="bg-card rounded-2xl border border-border p-6 shadow-sm">
+                <div key={t.name} className="glass scroll-reveal rounded-2xl border p-6 shadow-sm">
                   <div className="flex gap-0.5 mb-4">
                     {Array.from({ length: 5 }).map((_, i) => (
                       <Star key={i} className="h-4 w-4 fill-primary text-primary" />
@@ -427,7 +427,7 @@ export default function Landing() {
         </section>
 
         {/* ── FAQ ────────────────────────────────────────────────────────────── */}
-        <section className="py-24 px-6 lg:px-16 bg-muted/30 border-y border-border">
+        <section className="py-24 px-6 lg:px-16 bg-muted/20 border-y border-border/60">
           <div className="max-w-3xl mx-auto">
             <div className="text-center mb-12">
               <p className="text-sm font-semibold uppercase tracking-widest text-primary mb-3">FAQ</p>
@@ -435,7 +435,7 @@ export default function Landing() {
                 Frequently asked questions
               </h2>
             </div>
-            <Accordion type="single" collapsible className="bg-card rounded-2xl border border-border px-2">
+            <Accordion type="single" collapsible className="glass rounded-2xl border px-2">
               {FAQS.map((faq, i) => (
                 <AccordionItem key={i} value={`faq-${i}`}>
                   <AccordionTrigger className="text-left px-4">{faq.q}</AccordionTrigger>
@@ -560,7 +560,7 @@ function ContactForm() {
 
   if (submitted) {
     return (
-      <div className="bg-card rounded-2xl border border-border p-8 shadow-sm flex flex-col items-center justify-center text-center">
+      <div className="glass rounded-2xl border p-8 shadow-sm flex flex-col items-center justify-center text-center">
         <CheckCircle2 className="h-10 w-10 text-primary mb-3" />
         <p className="font-semibold">Thanks for reaching out!</p>
         <p className="text-sm text-muted-foreground mt-1">We'll respond to your message soon.</p>
@@ -569,7 +569,7 @@ function ContactForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-card rounded-2xl border border-border p-8 shadow-sm space-y-4">
+    <form onSubmit={handleSubmit} className="glass rounded-2xl border p-8 shadow-sm space-y-4">
       <Input placeholder="Your name" required />
       <Input type="email" placeholder="Your email" required />
       <Textarea placeholder="How can we help?" rows={4} required />

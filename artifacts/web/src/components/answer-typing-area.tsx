@@ -9,7 +9,7 @@
  * Clipboard is deliberately NOT allowed here (allowClipboard defaults to false): pasting the
  * passage into the answer box would trivially defeat the exercise.
  */
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { TypingEngineResult } from "@/hooks/use-typing-engine";
 import { attachTypingKeyHandlers } from "@/lib/typing-key-handler";
 
@@ -22,6 +22,13 @@ interface Props {
 
 export function AnswerTypingArea({ engine, language, fontSize = "text-xl", disabled = false }: Props) {
   const { textareaRef, typedText, appendChars, handleBackspace, deleteTrailing, composeChars, isCompleted } = engine;
+  // Keeps the caret in view when the answer area lives inside a viewport-capped scroll
+  // panel: as typing pushes the caret below the fold, the nearest scrollable ancestor is
+  // nudged just enough to reveal it ("nearest" never yanks the page when already visible).
+  const caretRef = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    caretRef.current?.scrollIntoView({ block: "nearest" });
+  }, [typedText]);
 
   useEffect(() => {
     const ta = textareaRef.current;
@@ -57,7 +64,7 @@ export function AnswerTypingArea({ engine, language, fontSize = "text-xl", disab
   return (
     <div
       data-answer-surface
-      className="relative w-full h-full min-h-[20rem] rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring"
+      className="relative w-full min-h-full rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring"
     >
       <textarea
         ref={textareaRef}
@@ -73,7 +80,7 @@ export function AnswerTypingArea({ engine, language, fontSize = "text-xl", disab
         data-enable-grammarly="false"
       />
       <div
-        className={`relative z-0 w-full h-full min-h-[20rem] p-4 whitespace-pre-wrap break-words text-foreground ${fontSize}`}
+        className={`relative z-0 w-full min-h-[18rem] p-4 whitespace-pre-wrap break-words text-foreground ${fontSize}`}
         style={{
           fontFamily: isDevanagari
             ? "'Noto Sans Devanagari', 'Mangal', 'Kokila', 'Arial Unicode MS', sans-serif"
@@ -88,7 +95,7 @@ export function AnswerTypingArea({ engine, language, fontSize = "text-xl", disab
           </span>
         )}
         {!isCompleted && !disabled && (
-          <span className="inline-block w-0.5 h-[1.1em] align-middle bg-primary/70 animate-pulse ml-0.5" />
+          <span ref={caretRef} className="inline-block w-0.5 h-[1.1em] align-middle bg-primary/70 animate-pulse ml-0.5" />
         )}
       </div>
     </div>
